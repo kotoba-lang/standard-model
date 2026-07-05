@@ -1,0 +1,11 @@
+{:paths ["src"]
+ ;; Zero-dep, portable .cljc. Classical Standard Model field algebra --
+ ;; gauge/tensor/vector/spinor fields, equations of motion, evaluated
+ ;; numerically. NOT quantization/RGE/scattering/lattice (ADR-2607051500).
+ :deps {}
+ :aliases
+ {:test {:extra-paths ["test"]
+         :extra-deps {io.github.cognitect-labs/test-runner
+                      {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+         :main-opts ["-m" "cognitect.test-runner"]
+         :exec-fn cognitect.test-runner.api/test}}}
