@@ -39,13 +39,14 @@ out of scope here.
   `SU(3)_c x SU(2)_L x U(1)_Y` covariant derivative, and Lagrangian-density
   term assembly (Yang-Mills + Dirac + Higgs + Yukawa).
 - **`kotoba.sm.gtg`** -- Gauge Theory Gravity (Lasenby-Doran-Gull 1998)
-  **rotation-gauge sector (Phase 0a), position-gauge sector (Phase 0b), and a
-  narrowly-scoped curvature quadratic invariant (Phase 0c) ONLY**. See "Gauge
-  Theory Gravity scope" below before reading or extending this namespace --
-  it is a narrow, literature-faithful port of two sectors plus one deliberately
-  limited curvature invariant, not a gravity engine.
+  **rotation-gauge sector (Phase 0a), position-gauge sector (Phase 0b), a
+  narrowly-scoped curvature quadratic invariant (Phase 0c), and a general-h
+  reciprocal frame (Phase 0d) ONLY**. See "Gauge Theory Gravity scope" below
+  before reading or extending this namespace -- it is a narrow,
+  literature-faithful port of two sectors, one deliberately limited curvature
+  invariant, and one dual-basis construction, not a gravity engine.
 
-## Gauge Theory Gravity scope (`kotoba.sm.gtg`, Phase 0a + Phase 0b + Phase 0c)
+## Gauge Theory Gravity scope (`kotoba.sm.gtg`, Phase 0a + Phase 0b + Phase 0c + Phase 0d)
 
 Lasenby-Doran-Gull's 1998 observation is that the restricted Lorentz group
 `SO(1,3)+` can be gauged with the exact same machinery `kotoba.sm.gauge`
@@ -215,11 +216,86 @@ new code that exercises it):**
     matching a by-hand `tensor/lower2` + `tensor/full-contract` computation
     (`gtg_test.cljc`'s `curvature-quadratic-invariant-nonzero-for-concrete-curvature`).
 
+**Phase 0d (general-position-gauge reciprocal frame, a deliberately
+two-staged addition) adds:**
+
+11. **Stage 1 (implemented): a general `NxN` matrix inverse and a reciprocal
+    (dual) frame for a general invertible `h`.** `kotoba.sm.tensor/mat-det`,
+    `mat-minor`, `mat-adjugate`, `mat-inverse` -- ordinary Laplace-expansion/
+    adjugate linear algebra (textbook, no physics convention involved),
+    throwing `ex-info` on a `~0` determinant rather than dividing by it, the
+    same spirit as `kotoba.sm.gauge/diagonal-gram-real`'s guard on a `~0`
+    Gram-matrix diagonal entry -- and `kotoba.sm.gtg/reciprocal-frame`: the
+    reciprocal (dual) frame `h-bar^mu` of a GENERAL invertible
+    position-gauge-field VALUE `h` (not just `position-gauge-identity` or a
+    constant Lorentz matrix, Phase 0b's scope), defined by the standard
+    linear-algebra dual-basis biorthogonality relation
+    `h-bar^mu . h_nu = delta^mu_nu`, where `.` is the PLAIN component
+    (Kronecker) pairing, NOT `kotoba.sm.tensor/dot`'s Minkowski-metric
+    pairing. This gives `Hbar = (H^-1)^T` (`mat-inverse` then
+    `mat-transpose`) -- verified: `h * h^-1 = h^-1 * h = I` for a concrete
+    non-identity invertible `h`; the biorthogonality relation holds
+    numerically for that same `h`; a singular (`~0` determinant) `h` throws
+    `ex-info`; and at `h = position-gauge-identity`, `h-bar = h` EXACTLY
+    (bit-for-bit -- the identity matrix is its own inverse and its own
+    transpose).
+
+12. **Stage 2 (investigated, deliberately NOT implemented): the true
+    Lasenby-Doran-Gull curvature scalar `R`.** Per the task instructions
+    for this phase, stage 2 was to be implemented ONLY if the exact
+    index/convention of the LDG formula
+    `R = h^mu ^ h^nu . R(h-bar_nu, h-bar_mu)` could be confirmed from at
+    least two independent literature sources that agree. The investigation
+    found two independent, mutually-corroborating PRIMARY sources (by the
+    original author team) that DO agree on the Ricci scalar's high-level
+    structure:
+    - Lasenby, Doran & Gull, "Gravity, Gauge Theories and Geometric
+      Algebra", Phil. Trans. R. Soc. Lond. A (1998) 356 487-582, updated
+      version [arXiv:gr-qc/0405033](https://arxiv.org/abs/gr-qc/0405033),
+      section 4 "The field equations", eqns 4.9, 4.11, 4.12.
+    - Lewis, Doran & Lasenby, "Quadratic Lagrangians and Topology in Gauge
+      Theory Gravity", [arXiv:gr-qc/9910039](https://arxiv.org/abs/gr-qc/9910039),
+      section 2, eqns 5, 6, 12, 14.
+
+    Both sources give (translating into this namespace's notation)
+    `R = sum_{a,b} gamma^a . (gamma^b . R(h_b ^ h_a))`, where `h_b = h(e_b)`
+    is exactly Phase 0b's existing `h`, `gamma^a` is the reciprocal of the
+    FIXED background orthonormal frame (trivial under the Minkowski metric,
+    `kotoba.sm.tensor/raise` applied to the ordinary basis vectors -- **not**
+    a reciprocal frame of `h`), and `R(x^y)` is the bilinear extension of
+    Phase 0a's `rotation-field-strength` to an arbitrary bivector argument
+    (rigorously justified from `R_mu-nu`'s own defining bilinearity in its
+    two vector slots, needing no further literature confirmation). This is
+    a genuine, useful finding on its own: it shows Stage 1's
+    `reciprocal-frame` (a reciprocal frame *of* `h`) is **not** what this
+    formula's outer contraction needs at all, correcting the phase's
+    original working assumption. **However**, translating
+    `gamma^b . R(h_b^h_a)` (a vector-dot-bivector Clifford-algebra
+    contraction) into this codebase's six-generator-component
+    `R[mu][nu][k]` array representation requires an ADDITIONAL, nontrivial
+    step -- which spacetime/generator-index slot the contracting vector's
+    index pairs with, and with what sign/factor -- that neither source
+    spells out in a form directly transcribable to this array
+    representation. A hand re-derivation via the standard GA identity
+    `v.(a^b)=(v.a)b-(v.b)a` produced a candidate formula, but with
+    unresolved factor-of-2/sign risk once expressed over the six generator
+    components, and no independent worked numeric example was found to test
+    a candidate implementation against. This is exactly the class of
+    silent-index-bug risk `kotoba.sm.gauge/self-interaction-term`'s
+    since-fixed slot-order bug (see `rotation-field-strength`'s docstring)
+    and `curvature-quadratic-invariant`'s own honesty note (point 10 above)
+    already flag for this precise problem. Per the task's own instructions,
+    **declining to implement here is the correct outcome, not a failure**:
+    `curvature-scalar` remains unimplemented, and this writeup (plus the
+    matching docstring on `kotoba.sm.gtg/reciprocal-frame`) records the
+    investigation so a future pass does not have to repeat the literature
+    search from scratch.
+
 **Explicitly out of scope, not implemented here** (deliberately, deferred to
 a later phase if ever pursued): the true Lasenby-Doran-Gull curvature scalar
-`R` for **any** `h` (a general 4x4 matrix inverse / reciprocal frame `h-bar`
-is not implemented anywhere in this codebase -- see point 10 above for
-exactly how Phase 0c's quadratic invariant differs from it, even at
+`R` for **any** `h` (see point 12 above for the Phase 0d investigation and
+exactly which remaining step blocked implementation, and point 10 above for
+how Phase 0c's quadratic invariant differs from it even at
 `h = position-gauge-identity`), the Einstein multivector, the GTG action
 principle and field equations, any proof of equivalence to General
 Relativity, and any dark-matter/dark-energy/de-Sitter extension. **Also out
@@ -228,12 +304,14 @@ of scope**: the FULL combined `h_mu` + `Omega_mu` GTG covariant derivative
 spacetime-vector derivative/torsion) -- Phase 0a's covariant derivative (5)
 and Phase 0b's derived metric (8) are developed independently of each other
 here, not yet combined, and Phase 0c's curvature invariant (10) is built from
-Phase 0a's `R_mu-nu` alone, without reference to `h` at all; that combination
-is deferred to a later phase (Phase 0d or beyond). **This namespace
-implements the rotation-gauge sector's generator algebra/covariant
-derivative, the position-gauge sector's derived metric, and one narrowly-
-scoped curvature quadratic invariant only** -- it should not be described as
-"GTG implemented" or as any kind of gravity engine.
+Phase 0a's `R_mu-nu` alone, without reference to `h` at all (Phase 0d's
+`reciprocal-frame` does not change this -- it is not yet wired into either);
+that combination is deferred to a later phase (Phase 0e or beyond). **This
+namespace implements the rotation-gauge sector's generator algebra/covariant
+derivative, the position-gauge sector's derived metric, one narrowly-scoped
+curvature quadratic invariant, and a general-h dual-basis reciprocal frame
+only** -- it should not be described as "GTG implemented" or as any kind of
+gravity engine.
 
 ## Develop
 

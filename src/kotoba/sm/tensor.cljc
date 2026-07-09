@@ -49,6 +49,87 @@
 (defn mat-trace [m] (reduce + (map-indexed (fn [i row] (nth row i)) m)))
 
 ;; ---------------------------------------------------------------------------
+;; general square-matrix determinant/inverse (adjugate/cofactor method).
+;;
+;; This is ORDINARY linear algebra -- the textbook Laplace-expansion
+;; determinant and the classical-adjoint inverse formula m^-1 = adj(m)/det(m)
+;; -- with no physics convention baked in (unlike `metric`/`lower`/`raise`
+;; above, which are specific to this namespace's mostly-minus signature).
+;; `kotoba.sm.gtg` uses this at N=4 to invert the position gauge field h and
+;; build its reciprocal frame (`kotoba.sm.gtg/reciprocal-frame`); the
+;; implementation itself works for any square N (recursive cofactor
+;; expansion), not hard-coded to 4x4.
+;; ---------------------------------------------------------------------------
+
+(defn mat-minor
+  "The (n-1)x(n-1) submatrix of square matrix `m` obtained by deleting row `i`
+  and column `j` (0-indexed) -- the standard 'minor' of linear algebra."
+  [m i j]
+  (vec (for [row (concat (subvec m 0 i) (subvec m (inc i)))]
+         (vec (concat (subvec row 0 j) (subvec row (inc j)))))))
+
+(defn mat-det
+  "Determinant of a square matrix, via Laplace/cofactor expansion along row 0
+  (recursive; base cases 1x1 and 2x2). General N, not hard-coded to 4x4."
+  [m]
+  (let [n (count m)]
+    (cond
+      (= n 1) (get-in m [0 0])
+      (= n 2) (- (* (get-in m [0 0]) (get-in m [1 1]))
+                 (* (get-in m [0 1]) (get-in m [1 0])))
+      :else (reduce +
+                     (for [j (range n)]
+                       (* (if (even? j) 1 -1)
+                          (get-in m [0 j])
+                          (mat-det (mat-minor m 0 j))))))))
+
+(defn mat-adjugate
+  "The adjugate (classical adjoint) of a square matrix: the transpose of its
+  cofactor matrix, adj(m)[i][j] = (-1)^(i+j) * det(minor m j i) (the (j,i)
+  cofactor, placed at (i,j) -- i.e. already transposed relative to the
+  cofactor matrix itself, so `mat-inverse` does not need a separate
+  `mat-transpose` step). Satisfies m . adj(m) = adj(m) . m = det(m) * I for
+  any square m, invertible or not (the standard adjugate identity) --
+  `mat-inverse` divides by `mat-det` to get the actual inverse when det != 0."
+  [m]
+  (let [n (count m)]
+    (vec (for [i (range n)]
+           (vec (for [j (range n)]
+                  (* (if (even? (+ i j)) 1 -1)
+                     (mat-det (mat-minor m j i)))))))))
+
+(defn mat-inverse
+  "The inverse of a square matrix `m`, via the adjugate/determinant method
+  m^-1 = adj(m) / det(m). Throws `ex-info` if `det(m)` is ~0 (within `eps`),
+  i.e. `m` is singular/non-invertible -- the same 'throw rather than silently
+  divide by ~0' spirit as `kotoba.sm.gauge/diagonal-gram-real`'s guard on a
+  ~0 Gram-matrix diagonal entry, applied here to a general matrix inverse
+  instead of that function's Gram-matrix-diagonal special case.
+
+  Uses `(/ 1 d)`, not `(/ 1.0 d)`, so that an exact-integer `m` (e.g. the
+  identity matrix) with an exact-integer, nonzero determinant produces an
+  EXACT (Clojure ratio/integer, not floating-point-rounded) result -- in
+  particular `(mat-inverse identity-matrix)` is bit-for-bit the identity
+  matrix again, not merely numerically close to it. For a floating-point `m`
+  (the common case for a general position-gauge field h), `d` is already a
+  double and `(/ 1 d)` behaves exactly like ordinary floating-point division.
+  (This exactness is a `:clj`-only bonus: ClojureScript has no exact ratio
+  type, so `(/ 1 d)` for an integer `d` other than +/-1 is already a rounded
+  float there -- this namespace's OTHER exactness claims, e.g.
+  `kotoba.sm.gtg`'s flat-limit metric checks, do not depend on ratios and
+  hold on both platforms; only THIS specific exact-integer-inverse case is
+  JVM-only, and only for divisors that are not +/-1.)"
+  ([m] (mat-inverse m 1e-9))
+  ([m eps]
+   (let [d (mat-det m)]
+     (when (<= (Math/abs (double d)) eps)
+       (throw (ex-info
+               (str "kotoba.sm.tensor/mat-inverse: matrix is singular (determinant "
+                    d " is ~0, within eps=" eps ") -- not invertible.")
+               {:kotoba.sm.tensor/reason :singular-matrix :det d :m m})))
+     (mat-scale (/ 1 d) (mat-adjugate m)))))
+
+;; ---------------------------------------------------------------------------
 ;; index raise/lower, invariant products (rank 1)
 ;; ---------------------------------------------------------------------------
 
