@@ -57,7 +57,17 @@
        gauge potential, same data shape `kotoba.sm.gauge` already uses for
        A_mu^a) and its field strength / curvature bivector R_mu-nu, obtained
        by handing this generator set to `kotoba.sm.gauge/field-strength`
-       unmodified (`rotation-field-strength`).
+       unmodified (`rotation-field-strength`). R_mu-nu^k = -R_nu-mu^k
+       (the physically required antisymmetry) now holds for EVERY excited
+       Omega component, including mixed boost/rotation self-interaction --
+       `kotoba.sm.gauge/self-interaction-term` had an independent,
+       since-fixed structure-constant slot-order bug (invisible for compact
+       U(1)/SU(2)/SU(3) groups, but visible here because this generator
+       set's trace-Gram matrix is diagonal yet non-uniform) that used to
+       break this antisymmetry for mixed boost/rotation excitations; see
+       `rotation-field-strength`'s docstring and gtg_test.cljc's
+       `rotation-field-strength-self-interaction-now-antisymmetric-*` tests
+       for the before/after record.
     5. the spin-connection covariant derivative on a Dirac spinor,
        D_mu psi = d_mu psi - i g Omega_mu^{ab} T_{ab} psi, obtained by
        handing this generator set to `kotoba.sm.gauge/covariant-derivative`
@@ -380,7 +390,24 @@
   antisymmetric differencing and never depended on the structure-constant
   normalization; the SELF-INTERACTION term g f^abc Omega_mu^b Omega_nu^c uses
   `rotation-raw-structure-constants`, which (see the FIXED note there) now
-  returns the genuine so(1,3) structure constants."
+  returns the genuine so(1,3) structure constants.
+
+  R_mu-nu^k = -R_nu-mu^k (the physically required curvature-bivector
+  antisymmetry) NOW HOLDS EVEN WHEN THE EXCITED Omega COMPONENTS MIX
+  BOOST-TYPE AND ROTATION-TYPE INDICES. This used to fail for mixed
+  boost/rotation self-interaction: `kotoba.sm.gauge/self-interaction-term`
+  read the structure-constant array with the output/free index `a` in the
+  wrong array slot (a bug independent of, and found after, the Phase-0a
+  trace-Gram-normalization fix noted above), which is numerically invisible
+  for compact groups (U(1)/SU(2)/SU(3), whose structure constants are
+  totally antisymmetric under any index permutation) but broke R's
+  mu<->nu antisymmetry here whenever the self-interaction term's two
+  summed-over Omega components had DIFFERENT `generator-trace-gram` signs
+  (one boost K=-1, one rotation K=+1) -- see
+  `kotoba.sm.gauge`'s `self-interaction-term` docstring for the fix and
+  `gtg_test.cljc`'s
+  `rotation-field-strength-self-interaction-now-antisymmetric-for-mixed-trace-gram-sign-components-after-index-order-fix`
+  for the before/after numeric record."
   [d-Omega Omega g]
   (gauge/field-strength (rotation-raw-structure-constants) g d-Omega Omega))
 

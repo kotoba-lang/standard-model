@@ -207,13 +207,39 @@
                    (mapv (fn [ap am] (/ (- ap am) (* 2 h))) (nth Ap nu) (nth Am nu)))))))))
 
 (defn- self-interaction-term
-  "g sum_b,c f^abc A_mu^b A_nu^c, for one generator index a."
+  "g sum_b,c f^bca A_mu^b A_nu^c, for one generator index a.
+
+  Slot order matters here and must match `structure-constants`'s own
+  convention: that function defines f[A][B][D] from [T_A,T_B] = i f^{ABD} T_D,
+  i.e. D -- the index of the generator T_D the commutator is expanded
+  against -- is the OUTPUT/target index, and it sits in the THIRD array
+  slot, `f-abc[A][B][D]`. In `g f^abc A_mu^b A_nu^c`, the free index `a`
+  (the component of F_mu-nu^a being computed) plays that same target-index
+  role -- it is the generator the self-interaction term is a coefficient
+  of -- while `b` and `c` are the summed-over indices of A_mu and A_nu,
+  matching the commutator's A and B slots. So the correct lookup is
+  `(get-in f-abc [b cc a])`, NOT `(get-in f-abc [a b cc])`.
+
+  This distinction is invisible for a totally antisymmetric f^ABC (true for
+  every compact generator set actually used here -- U(1)/SU(2)/SU(3), whose
+  uniform Tr(T^aT^b)=1/2delta^ab Gram matrix makes f^ABC fully antisymmetric
+  under ANY permutation of its three indices, so which slot holds `a` makes
+  no numerical difference -- see gauge_test.cljc's `self-interaction-term-*`
+  slot-order regression tests). It matters once the Gram matrix K[A][B] is
+  diagonal but non-uniform (rotation-type +1 vs boost-type -1 entries, as in
+  so(1,3)'s bivector generators, `kotoba.sm.gtg`): there f^ABC is only
+  antisymmetric under swapping its FIRST TWO indices (inherited from
+  [T_A,T_B]=-[T_B,T_A]), not under moving the third index elsewhere, so
+  reading the output index `a` out of the wrong slot silently breaks the
+  physically required F_mu-nu^a = -F_nu-mu^a antisymmetry of the field
+  strength. See `kotoba.sm.gtg-test`'s
+  `rotation-field-strength-self-interaction-now-antisymmetric-*` tests."
   [f-abc g A mu nu a n]
   (let [A-mu (nth A mu)
         A-nu (nth A nu)]
     (* g (reduce +
                  (for [b (range n) cc (range n)]
-                   (* (get-in f-abc [a b cc]) (nth A-mu b) (nth A-nu cc)))))))
+                   (* (get-in f-abc [b cc a]) (nth A-mu b) (nth A-nu cc)))))))
 
 (defn field-strength
   "F_mu-nu^a = d_mu A_nu^a - d_nu A_mu^a + g f^abc A_mu^b A_nu^c.

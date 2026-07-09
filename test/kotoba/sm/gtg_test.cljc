@@ -230,55 +230,70 @@
         (is (close? (get-in R [mu nu k]) (- (get-in R [nu mu k])))
             (str "R[" mu "][" nu "][" k "] = -R[" nu "][" mu "][" k "]"))))))
 
-(deftest rotation-field-strength-self-interaction-not-antisymmetric-for-mixed-trace-gram-sign-components
-  "HONEST SCOPE-GAP RECORD, found while hardening this test suite's antisymmetry coverage (not
-  previously exercised by any existing test -- both existing rotation-field-strength tests above
-  either zero out Omega entirely, so the self-interaction term never fires, or excite only a SINGLE
-  bivector component against itself, whose self-interaction is f^{akk}=0 by total antisymmetry of
-  the first two indices of the RAW commutator trace regardless of normalization).
+(deftest rotation-field-strength-self-interaction-now-antisymmetric-for-mixed-trace-gram-sign-components-after-index-order-fix
+  "BEFORE/AFTER: this deftest used to be named
+  `rotation-field-strength-self-interaction-not-antisymmetric-for-mixed-trace-gram-sign-components`
+  and asserted the OPPOSITE of what it asserts now -- it recorded an HONEST SCOPE-GAP: for a
+  self-interaction term exciting one boost-type and one rotation-type Omega component,
+  R[0][1][1] and R[1][0][1] came out numerically EQUAL (+0.35 and +0.35) instead of negatives of
+  each other, breaking the physically required R_mu-nu = -R_nu-mu antisymmetry.
 
-  `kotoba.sm.gauge/field-strength`'s self-interaction term g f^abc Omega_mu^b Omega_nu^c is
-  antisymmetric under mu<->nu swap only when, for every pair of EXCITED field components (b,c),
-  the trace-Gram diagonal entries K[b][b] and K[c][c] agree (true automatically for su(2)/su(3),
-  whose Gram is uniformly 1/2 -- see gauge_test.cljc's
-  `field-strength-antisymmetric-under-mu-nu-swap` -- and true here whenever both excited Omega
-  components are the SAME type, both boost or both rotation -- see
-  `rotation-field-strength-antisymmetric-for-same-trace-gram-sign-components` above). Derivation:
-  f[A][B][D] = -i Tr([T_A,T_B]T_D)/K[D][D], and g_ABD := -i Tr([T_A,T_B]T_D) (no /K[D][D]) is
-  TOTALLY antisymmetric in A,B,D for any generator set (a generic trace-of-commutator identity, not
-  specific to this basis). Swapping the summed pair (b,c) in the self-interaction term compares
-  f[a][b][c]=g_abc/K[c][c] against f[a][c][b]=g_acb/K[b][b]=-g_abc/K[b][b]; these are negatives of
-  each other (giving antisymmetry) only when K[b][b]=K[c][c]. For this so(1,3) generator set,
-  `compact-group-trace-normalization-holds?` already records that K is +1 for rotation-type indices
-  and -1 for boost-type indices -- NOT uniform -- so mixing one boost-type and one rotation-type
-  excited component breaks the antisymmetry that `field-strength`'s formula silently assumes.
-
-  This is a currently-unfixed correctness gap in reusing `kotoba.sm.gauge/field-strength` unmodified
-  for this noncompact generator set (distinct from, and not covered by, the non-diagonal-Gram scope
-  note already documented in kotoba.sm.gauge's namespace docstring -- this K IS diagonal, just not
-  uniform). Recorded honestly as a live regression check of the CURRENT numeric output -- matching
-  this namespace's existing practice of exposing known non-idealities as re-checkable predicates
-  rather than asserting them away (`compact-group-trace-normalization-holds?`) -- NOT asserted here
-  as correct or desired behavior. A fix belongs in `kotoba.sm.gauge`/`kotoba.sm.gtg` production
-  code, out of scope for this test-only change."
+  ROOT CAUSE (now fixed): `kotoba.sm.gauge/self-interaction-term` read the structure-constant
+  array as f-abc[a][b][cc] (output/free index `a` in the FIRST slot), but `structure-constants`
+  itself defines f[A][B][D] from [T_A,T_B]=if^{ABD}T_D, where D -- the output/target index -- is
+  the THIRD slot. For su(2)/su(3) (uniform Tr(T^aT^b)=1/2delta^ab Gram, so f^ABC is totally
+  antisymmetric under ANY index permutation) this slot mismatch is numerically invisible -- see
+  gauge_test.cljc's `self-interaction-term-slot-order-fix-is-bit-identical-for-su2-and-su3`. But
+  f[A][B][D] = -i Tr([T_A,T_B]T_D)/K[D][D] is only antisymmetric under swapping its FIRST TWO
+  indices (inherited from the commutator); moving the THIRD index elsewhere additionally divides
+  by a DIFFERENT K[D][D] when K is diagonal but non-uniform, as it is here (K=+1 rotation-type,
+  K=-1 boost-type -- `compact-group-trace-normalization-holds?`). Reading `a` out of the wrong
+  slot therefore silently broke antisymmetry whenever the two summed-over Omega components mixed
+  a boost-type and a rotation-type index. `kotoba.sm.gauge/self-interaction-term` has SINCE BEEN
+  FIXED to read f-abc[b][cc][a] (output index in the THIRD/target slot, matching
+  `structure-constants`'s own convention) -- see that function's docstring -- so R is now
+  antisymmetric here too, same as the already-passing same-trace-gram-sign case above."
   (testing "Omega_mu(x)^k excites ONE boost-type component (index 0, 'boost-x') in the mu=0
             direction slot and ONE DIFFERENT rotation-type component (index 3, 'rotation-z') in the
             mu=1 direction slot -- so R[0][1]'s self term multiplies Omega_0^0 * Omega_1^3 (picking
-            out f[a][0][3]) while R[1][0]'s self term multiplies Omega_1^3 * Omega_0^0 (picking out
-            f[a][3][0]), isolating exactly the f[a][0][3] vs f[a][3][0] comparison the derivation
-            above is about. Zero d-Omega (curl term is trivially antisymmetric on its own, so this
-            isolates the self-interaction term). The two excited-component-1 ('boost-y', itself
-            boost-type) output slots of R[0][1] and R[1][0] come out EQUAL, not negatives -- if
-            field-strength were antisymmetric here they would be +0.35 and -0.35"
+            out f[0][3][a] after the fix) while R[1][0]'s self term multiplies Omega_1^3 * Omega_0^0
+            (picking out f[3][0][a]); f[3][0][a]=-f[0][3][a] by antisymmetry under swapping the
+            FIRST TWO slots, which now genuinely holds regardless of K[b][b] vs K[c][c]. Zero
+            d-Omega (curl term is trivially antisymmetric on its own, so this isolates the
+            self-interaction term). The two excited-component-1 ('boost-y') output slots of
+            R[0][1] and R[1][0] now come out as NEGATIVES of each other: -0.35 and +0.35"
     (let [zero6 (vec (repeat 6 0.0))
           Omega [(assoc zero6 0 0.5) (assoc zero6 3 0.7) zero6 zero6]
           zero-d (vec (repeat 4 (vec (repeat 4 zero6))))
           R (gtg/rotation-field-strength zero-d Omega 1.0)]
-      (is (close? (get-in R [0 1 1]) 0.35))
+      (is (close? (get-in R [0 1 1]) -0.35))
       (is (close? (get-in R [1 0 1]) 0.35))
-      (is (not (close? (get-in R [1 0 1]) (- (get-in R [0 1 1]))))
-          "documents the gap: R[1][0][1] should equal -R[0][1][1]=-0.35 if antisymmetric, but is
-           observed to equal +R[0][1][1]=+0.35 instead"))))
+      (is (close? (get-in R [1 0 1]) (- (get-in R [0 1 1])))
+          "fixed: R[1][0][1] now equals -R[0][1][1] (0.35 = -(-0.35)), the physically required
+           antisymmetry, instead of the pre-fix +0.35 = +0.35 non-antisymmetric value"))))
+
+(deftest rotation-field-strength-self-interaction-antisymmetric-for-several-mixed-boost-rotation-patterns
+  (testing "generality beyond the single (index 0, index 3) pair above: three more distinct
+            boost/rotation excitation patterns (single mixed pair; two boosts + one rotation;
+            all three boost-type paired against all three rotation-type), each with zero d-Omega
+            (curl term trivially antisymmetric on its own) so only the self-interaction term is
+            exercised, still give R_mu-nu = -R_nu-mu component-by-component"
+    (let [zero6 (vec (repeat 6 0.0))
+          zero-d (vec (repeat 4 (vec (repeat 4 zero6))))
+          patterns
+          [;; a different single boost/rotation pair than the dedicated test above:
+           ;; index 1 (boost-y) against index 4 (rotation-y)
+           [(assoc zero6 1 0.6) (assoc zero6 4 -0.4) zero6 zero6]
+           ;; two boost-type components (0,1) in mu=0 against one rotation-type (5) in mu=1
+           [(assoc zero6 0 0.3 1 -0.2) (assoc zero6 5 0.8) zero6 zero6]
+           ;; ALL THREE boost-type indices excited in mu=0, ALL THREE rotation-type in mu=1 --
+           ;; every summed (b,c) pair is a genuinely mixed boost/rotation pair
+           [(assoc zero6 0 0.4 1 0.2 2 -0.3) (assoc zero6 3 0.5 4 -0.6 5 0.1) zero6 zero6]]]
+      (doseq [Omega patterns]
+        (let [R (gtg/rotation-field-strength zero-d Omega 1.0)]
+          (doseq [mu (range 4) nu (range 4) k (range 6)]
+            (is (close? (get-in R [mu nu k]) (- (get-in R [nu mu k])))
+                (str "Omega=" Omega " R[" mu "][" nu "][" k "] = -R[" nu "][" mu "][" k "]"))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; 5+6. spin-connection covariant derivative on a Dirac spinor, and the flat
