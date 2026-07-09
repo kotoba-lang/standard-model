@@ -1,8 +1,10 @@
 (ns kotoba.sm.gtg
   "Gauge Theory Gravity (Lasenby-Doran-Gull 1998, 'Gravity, gauge theories and
-  geometric algebra') -- ROTATION-GAUGE SECTOR (Phase 0a) AND POSITION-GAUGE
-  SECTOR (Phase 0b) ONLY. See the 'Scope' section of the repo README for the
-  ADR reference.
+  geometric algebra') -- ROTATION-GAUGE SECTOR (Phase 0a), POSITION-GAUGE
+  SECTOR (Phase 0b), AND A NARROWLY-SCOPED CURVATURE QUADRATIC INVARIANT
+  (Phase 0c, h = position-gauge-identity ONLY -- NOT the LDG curvature
+  scalar) ONLY. See the 'Scope' section of the repo README for the ADR
+  reference.
 
   GTG's central observation (well known in the literature, not a new result
   of this namespace) is that the restricted Lorentz group SO(1,3)+ can be
@@ -102,20 +104,76 @@
        `derived-metric-matches-flat?` packages this equality check (used for
        both (8)'s exact identity case and (9)'s Lorentz-matrix case).
 
-  EXPLICITLY OUT OF SCOPE, NOT IMPLEMENTED HERE (Phase 0a+0b): the
-  Riemann/Ricci curvature scalars built from R_mu-nu, the Einstein
-  multivector, the GTG action principle and field equations, any proof of
-  equivalence to General Relativity, and any dark-matter/dark-energy/
-  de-Sitter extension. ALSO OUT OF SCOPE: the FULL combined h_mu+Omega_mu GTG
-  covariant derivative (i.e. using h to relate the rotation-gauge connection
-  to an actual spacetime-vector derivative/torsion) -- this namespace's
-  Phase-0a covariant derivative (5) and Phase-0b derived metric (8) are
-  developed independently of each other, not yet combined. Those are
+  PHASE 0c (curvature quadratic invariant, DELIBERATELY NARROW SCOPE) adds:
+    10. `curvature-quadratic-invariant`: a scalar built from the rotation-gauge
+       curvature bivector R_mu-nu ALONE (`rotation-field-strength`'s output),
+       by lowering both spacetime indices with `kotoba.sm.tensor/lower2` and
+       fully contracting with `kotoba.sm.tensor/full-contract` (reusing
+       `kotoba.sm.tensor`'s EXISTING rank-2 raise/lower/contract machinery,
+       no new tensor primitives), per bivector-generator component k, then
+       summing the 6 components weighted by this namespace's own diagonal
+       Killing-form-like trace pairing `generator-trace-gram` (section 3
+       above) -- i.e. I = sum_k K[k][k] (R_mu-nu^k R^{mu-nu}_k), the
+       'eta^mu-rho eta^nu-sigma R_mu-nu . R_rho-sigma' quadratic contraction
+       collapsed via the diagonal metric.
+       THIS IS DELIBERATELY NOT the Lasenby-Doran-Gull curvature scalar
+       R = h^mu ^ h^nu . R(h-bar_nu, h-bar_mu). That definition needs the
+       position gauge field's RECIPROCAL FRAME h-bar, i.e. a general 4x4
+       matrix inverse, which is not implemented ANYWHERE in this codebase
+       (see item 7's note and `kotoba.sm.gauge`'s own analogous documented
+       omission) -- computing R for a general h is explicitly OUT OF SCOPE
+       and deferred (see below). The one case where h-bar IS trivial to get
+       right is h = `position-gauge-identity` (h-bar = h = the identity), so
+       `curvature-quadratic-invariant` is scoped to being INTERPRETABLE only
+       in that special case; it does not take an `h` argument at all because
+       R_mu-nu itself (Phase 0a) is computed independently of h (Phase 0b) --
+       see the FULL COMBINED covariant derivative note below, still deferred.
+       EVEN AT h = `position-gauge-identity`, `curvature-quadratic-invariant`
+       is honestly NOT a port of the LDG R: working through the definition,
+       R = h^mu ^ h^nu . R(h-bar_nu, h-bar_mu) is a single LINEAR contraction
+       of R_mu-nu (dot the FIXED bivector h^mu^h^nu, which does not depend on
+       R at all, against R -- bilinear in two DIFFERENT bivectors, one of
+       which is a constant), the same relationship the ordinary linear Ricci
+       scalar R has to the full Riemann tensor. `curvature-quadratic-invariant`
+       is instead QUADRATIC in R_mu-nu (R contracted against itself) -- the
+       same relationship the (quadratic) Kretschmann scalar R_abcd R^abcd has
+       to the Riemann tensor in ordinary GR. Ricci scalar and Kretschmann
+       scalar are DIFFERENT invariants of DIFFERENT degree in the curvature:
+       related only in that both vanish exactly when the full curvature
+       vanishes (gtg_test.cljc's flat-limit check for this one), not
+       proportional to each other and not interchangeable in general. This
+       namespace does not implement the true linear LDG contraction either --
+       doing so correctly requires pinning down, from the LDG geometric-
+       algebra convention (not guessed at here), exactly which of R_mu-nu's
+       two spacetime indices pairs with which of the curvature bivector's own
+       two indices, and there is no independent literature reference value in
+       this codebase to test that pairing against -- so it is left as a
+       named, explicit follow-up rather than risked as a plausible-looking
+       but silently wrong implementation. `curvature-quadratic-invariant` is
+       also NOT guaranteed non-negative: `generator-trace-gram`'s K is
+       indefinite (+1 rotation-type, -1 boost-type), so a boost-dominated
+       curvature can make it negative -- a further symptom, like
+       `compact-group-trace-normalization-holds?`'s finding, of this
+       generator set's noncompactness.
+
+  EXPLICITLY OUT OF SCOPE, NOT IMPLEMENTED HERE (Phase 0a+0b+0c): the true
+  Lasenby-Doran-Gull curvature scalar R (see item 10's note for exactly how
+  Phase 0c's quadratic invariant differs from it, and why), for ANY h (a
+  general 4x4 matrix inverse / reciprocal frame h-bar is not implemented
+  anywhere in this codebase); the Einstein multivector, the GTG action
+  principle and field equations, any proof of equivalence to General
+  Relativity, and any dark-matter/dark-energy/de-Sitter extension. ALSO OUT OF
+  SCOPE: the FULL combined h_mu+Omega_mu GTG covariant derivative (i.e. using
+  h to relate the rotation-gauge connection to an actual spacetime-vector
+  derivative/torsion) -- this namespace's Phase-0a covariant derivative (5)
+  and Phase-0b derived metric (8) are developed independently of each other,
+  not yet combined, and Phase 0c's curvature invariant (10) is built from
+  Phase 0a's R_mu-nu alone, without reference to h at all. Those are
   legitimate, much larger follow-up efforts, deliberately deferred to a later
-  phase (Phase 0c or beyond) -- this namespace is a limited,
+  phase (Phase 0d or beyond) -- this namespace is a limited,
   literature-faithful port of the rotation-gauge and position-gauge SECTORS
-  ONLY, and must not be read as 'GTG is implemented here' or as any kind of
-  gravity engine."
+  plus one narrowly-scoped curvature invariant ONLY, and must not be read as
+  'GTG is implemented here' or as any kind of gravity engine."
   (:require [kotoba.sm.complex :as c]
             [kotoba.sm.tensor :as tensor]
             [kotoba.sm.spinor :as spinor]
@@ -468,3 +526,80 @@
      (every? true?
              (for [mu (range 4) nu (range 4)]
                (< (abs-num (- (get-in g [mu nu]) (get-in tensor/metric [mu nu]))) eps))))))
+
+;; ---------------------------------------------------------------------------
+;; 10. Phase 0c -- curvature quadratic invariant, narrowly scoped to
+;;    h = position-gauge-identity. See the namespace docstring's Phase-0c
+;;    SCOPE note (item 10) for the full derivation and, crucially, for why
+;;    this is honestly NOT the Lasenby-Doran-Gull curvature scalar R.
+;; ---------------------------------------------------------------------------
+
+(defn curvature-bivector-component
+  "R_mu-nu^k (`rotation-field-strength`'s output `R[mu][nu][k]`) with the
+  bivector-generator index `k` held FIXED, reshaped into a plain 4x4 real
+  rank-2 tensor R^{mu-nu} (upper spacetime indices) -- exactly the shape
+  `kotoba.sm.tensor`'s raise/lower/contract functions (`lower2`,
+  `full-contract`) already expect. Internal-use helper for
+  `curvature-quadratic-invariant`, exposed because it is independently
+  useful/checkable (e.g. against `rotation-field-strength-curl-term-matches-
+  yang-mills-form`'s hand-built `R`)."
+  [R k]
+  (vec (for [mu (range 4)]
+         (vec (for [nu (range 4)]
+                (get-in R [mu nu k]))))))
+
+(defn curvature-quadratic-invariant
+  "A curvature INVARIANT built from the rotation-gauge curvature bivector
+  R_mu-nu (`rotation-field-strength`'s output) ALONE:
+
+    I = sum_k K[k][k] * (R_mu-nu^k R^{mu-nu}_k)
+
+  where, for each of the 6 bivector-generator components `k`
+  (`generator-index-pairs`), `R_mu-nu^k R^{mu-nu}_k` is
+  `kotoba.sm.tensor/full-contract` of `curvature-bivector-component`'s
+  fixed-k rank-2 slice against its own `kotoba.sm.tensor/lower2` (BOTH
+  spacetime indices lowered via the Minkowski metric eta -- `tensor.cljc`'s
+  EXISTING raise/lower/contract machinery, reused unmodified, no new
+  tensor-algebra primitives added here), and `K` is `generator-trace-gram`
+  (this namespace's own diagonal so(1,3) Killing-form-like trace pairing from
+  section 3 above: +1 for the 3 rotation-type generators, -1 for the 3
+  boost-type ones). This is exactly the
+  'eta^mu-rho eta^nu-sigma R_mu-nu . R_rho-sigma' quadratic contraction (a
+  bivector-valued Yang-Mills-field-strength-squared-style invariant, the
+  so(1,3) analogue of F_mu-nu^a F^mu-nu_a), collapsed via the diagonal metric
+  so only rho=mu, sigma=nu survive.
+
+  *** HONESTY NOTE, READ BEFORE USING THIS AS 'the curvature scalar': *** this
+  is NOT the Lasenby-Doran-Gull (1998) curvature scalar
+  R = h^mu ^ h^nu . R(h-bar_nu, h-bar_mu). That true definition, even
+  restricted to h = `position-gauge-identity` (the one case where the
+  reciprocal frame h-bar = h = the identity trivially, needing no matrix
+  inverse), is a SINGLE LINEAR contraction of R_mu-nu against the FIXED
+  bivector h^mu^h^nu (which does not itself depend on R) -- the same
+  relationship the (linear) Ricci scalar has to the full Riemann tensor. This
+  function computes a QUADRATIC (R contracted against itself) invariant
+  instead -- the same relationship the Kretschmann scalar R_abcd R^abcd has
+  to the Riemann tensor in ordinary GR. Ricci scalar and Kretschmann scalar
+  are DIFFERENT invariants of DIFFERENT degree in the curvature: related only
+  in that both vanish exactly when the full curvature vanishes (see
+  gtg_test.cljc's flat-limit test), NOT proportional to each other and NOT
+  interchangeable in general -- so this function's numeric output should not
+  be read as 'the GTG curvature scalar' or used as a stand-in for it. The
+  true linear LDG contraction is deliberately NOT implemented here either
+  (see the namespace docstring's Phase-0c SCOPE note, item 10, for why:
+  pinning down which spacetime index pairs with which bivector-value index
+  needs an LDG-convention detail this pass has no independent literature
+  value to test against, so it is left as a named follow-up rather than
+  guessed at).
+
+  Also NOT guaranteed non-negative: `generator-trace-gram`'s K is indefinite
+  (+1/-1), so a boost-dominated curvature can make this negative -- a further
+  symptom, like `compact-group-trace-normalization-holds?`'s finding, of this
+  generator set's noncompactness."
+  [R]
+  (let [K (generator-trace-gram)]
+    (reduce +
+            (for [k (range 6)]
+              (let [Rk (curvature-bivector-component R k)
+                    Rk-lower (tensor/lower2 Rk)]
+                (* (get-in K [k k]) (tensor/full-contract Rk Rk-lower)))))))
