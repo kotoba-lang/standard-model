@@ -926,7 +926,7 @@
 
 (deftest curvature-scalar-vanishes-for-schwarzschild-vacuum-solution
   (testing "point A and point B: LDG's Ricci scalar formula
-            R = sum_{a,b} gamma^a.(gamma^b.R(h_b^h_a)) evaluates to ~0.0
+            R = sum_{a,b} gamma^a.(gamma^b.R(e_a^e_b)) evaluates to ~0.0
             (within finite-difference tolerance) for LDG's own Schwarzschild
             VACUUM solution -- the physically expected result, since a vacuum
             solution of the field equation has zero Ricci TENSOR by
@@ -944,3 +944,42 @@
     (let [h-field (constantly gtg/position-gauge-identity)
           x [0.2 0.5 -0.3 0.1]]
       (is (= 0.0 (gtg/curvature-scalar h-field x))))))
+
+(defn- ricci-tensor-component
+  "R_mu-nu = gamma_mu . (sum_rho gamma^rho . riemann-basis-pair(rho, nu)) --
+  LDG eq (4.11)/(4.12)'s FULL Ricci tensor, not merely its trace
+  (`curvature-scalar` sums this over mu=nu). Test-only helper: a STRONGER
+  regression oracle than the scalar alone, added after an independent
+  adversarial review found `curvature-scalar` had a real bug (double-applying
+  h -- see `curvature-scalar`'s own 'BUG FIX' docstring section) that a
+  scalar-only (trace-only) check could not detect, because the bug's spurious
+  ~1e-4-magnitude asymmetric components happened to cancel in THIS
+  solution's trace. Checking the full tensor closes that blind spot."
+  [h-field x mu nu]
+  (let [gamma-mu (tensor/raise (assoc [0.0 0.0 0.0 0.0] mu 1.0))
+        ricci-vec (reduce (fn [acc rho]
+                             (let [gamma-rho (tensor/raise (assoc [0.0 0.0 0.0 0.0] rho 1.0))
+                                   R-val (gtg/riemann-basis-pair h-field x rho nu)]
+                               (tensor/v+ acc (gtg/vector-dot-bivector gamma-rho R-val))))
+                           (vec (repeat 4 0.0))
+                           (range 4))]
+    (tensor/dot gamma-mu ricci-vec)))
+
+(deftest curvature-scalar-full-ricci-tensor-vanishes-not-merely-its-trace
+  (testing "point A and point B: EVERY component of the Ricci tensor R_mu-nu
+            (not just its trace, which `curvature-scalar` returns) is ~0.0
+            within finite-difference tolerance -- the genuine vacuum
+            condition (R_mu-nu=0 for ALL mu,nu, not merely R=0). This is the
+            regression test the independent adversarial review's bug report
+            asked for: the pre-fix formula produced components as large as
+            ~1.9e-4 (e.g. R_10) alongside ~1e-10 components (e.g. R_01) for
+            the SAME (mu,nu)-adjacent pair -- a magnitude ~2000x above this
+            pipeline's documented FD-noise floor, not explainable as
+            truncation error -- while the fixed formula keeps every
+            component at that same ~1e-10 noise floor"
+    (doseq [[x M] [[[0.0 3.0 4.0 0.0] 0.1] [[0.0 1.0 2.0 2.0] 0.05]]]
+      (let [h-field (schwarzschild-h-field M)]
+        (doseq [mu (range 4) nu (range 4)]
+          (let [R-mn (ricci-tensor-component h-field x mu nu)]
+            (is (close-fd? R-mn 0.0)
+                (str "Ricci[" mu "][" nu "] at x=" x " M=" M " => " R-mn))))))))

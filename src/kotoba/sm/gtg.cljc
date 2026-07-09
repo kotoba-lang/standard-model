@@ -1505,41 +1505,81 @@
    (tensor/mat-vec (riemann-map-matrix h-field x fd-h-inner fd-h-outer) B)))
 
 (defn curvature-scalar
-  "The TRUE Lasenby-Doran-Gull Ricci SCALAR,
+  "The TRUE Lasenby-Doran-Gull Ricci SCALAR, LDG eq (4.11)-(4.12):
 
-    R = sum_{a,b=0}^{3} gamma^a . (gamma^b . R(h_b ^ h_a))
+    Ricci(b) = sum_a gamma^a . R(e_a ^ b)                              (4.11)
+    R = sum_b gamma^b . Ricci(b) = sum_{a,b} gamma^a.(gamma^b.R(e_a^e_b))  (4.12)
 
-  -- the formula Phase 0d stage 2 (`reciprocal-frame`'s own docstring's
-  FOLLOW-UP LITERATURE CHECK) confirmed the STRUCTURE of from two independent
-  primary sources (Lasenby/Doran/Gull 1998/gr-qc/0405033 section 4; Lewis/
-  Doran/Lasenby gr-qc/9910039 section 2) but declined to implement because
-  translating 'gamma^b.R(h_b^h_a)' into this codebase's array representation
-  needed a bilinear extension of R to GENERAL (non-basis-pair) bivectors that
-  did not exist at the time. `riemann-map` (item 16) now supplies exactly
-  that missing piece, closing the gap with NO remaining index/sign ambiguity:
+  *** BUG FIX (found by independent adversarial review, see git history/PR
+  description): *** an earlier version of this function computed
+  'gamma^a.(gamma^b.R(h_b^h_a))' -- contracting the ALREADY-COVARIANT Riemann
+  map `riemann-map`/`riemann-basis-pair` (eq 4.48, which internally uses
+  L_a=a.hbar(grad), i.e. is already built FROM h) against a bivector
+  `wedge-vectors`(h_b,h_a) built from POSITION-GAUGE-FIELD ROWS instead of the
+  FIXED frame basis vectors e_a,e_b. Since `riemann-basis-pair`(a,b) computes
+  the LDG-covariant R(e_a^e_b) -- LDG's own eq (4.9), R(B)=R(h(B)) for a FLAT
+  R and BASIS bivector B, shows the h-dependence is already baked into HOW
+  `riemann-basis-pair` computes its answer, not into WHICH bivector argument
+  it is fed -- wedging h_b^h_a on top applied h a SECOND time (this codebase's
+  `riemann-basis-pair` corresponds to LDG's calligraphic, already-covariant
+  'script-R', which both eq (4.11) and the independent second source, Lewis/
+  Doran/Lasenby gr-qc/9910039 eq (12)/(14), contract with FLAT frame vectors
+  only, never with h(e_a)/h(e_b)). The bug was NOT caught by this namespace's
+  Schwarzschild regression test because that test only checks the SCALAR
+  (trace); the erroneous double-h ONLY affects terms whose free index is 0 (in
+  LDG's own Schwarzschild solution h(e_1)=e_1, h(e_2)=e_2, h(e_3)=e_3 exactly,
+  so double-applying h is a no-op on purely-spatial index pairs), and those
+  erroneous ~1e-4-magnitude off-diagonal Ricci-TENSOR terms happen to cancel
+  in the trace for this particular solution -- independently confirmed by
+  computing the FULL Ricci tensor (not just its trace) both ways: the buggy
+  formula gives an ASYMMETRIC tensor (e.g. R_10~1.9e-4 vs R_01~9e-11) while
+  this fixed formula gives a properly symmetric, uniformly-~0 (FD-noise-level)
+  tensor, as GR's vacuum condition requires (R_ab=0 for ALL a,b, not merely
+  its trace).
 
-    gamma^a = `tensor/raise` of the FIXED background orthonormal basis
-      vector e_a -- trivial under the Minkowski metric (BOTH literature
-      sources agree this outer contraction uses the fixed frame's OWN
-      reciprocal, NOT a reciprocal frame OF h -- i.e. NOT
-      `reciprocal-frame`/`reciprocal-frame-minkowski`, a DIFFERENT
-      construction `reciprocal-frame`'s own docstring already found does
-      NOT belong here).
-    h_b = `h-field`(x)[b] = h(e_b), Phase 0b's existing position-gauge field.
-    R(h_b^h_a) = `riemann-map` applied to `wedge-vectors`(h_b,h_a) -- h_b,h_a
-      are position-gauge-field ROWS, not fixed frame vectors, so this is
-      necessarily the GENERAL-bivector form of `riemann-map`, not
-      `riemann-basis-pair`.
+  Correct formula (this implementation): gamma^a, gamma^b = `tensor/raise` of
+  the FIXED background orthonormal basis vectors e_a,e_b (BOTH literature
+  sources agree this uses the fixed frame's OWN reciprocal, NOT a reciprocal
+  frame OF h -- i.e. NOT `reciprocal-frame`/`reciprocal-frame-minkowski`, a
+  DIFFERENT construction `reciprocal-frame`'s own docstring already found does
+  NOT belong here). No `wedge-vectors`/general `riemann-map` call needed,
+  since both indices here are always fixed basis vectors, never
+  position-gauge-field rows -- `riemann-basis-pair` DIRECTLY.
+
+  ARGUMENT-ORDER CAVEAT (read before relying on the SIGN of a nonzero result):
+  the code below calls `riemann-basis-pair` h-field x b a (b first, a second),
+  chosen to match which gamma contracts FIRST (gamma-b, the inner
+  `vector-dot-bivector` call) against which slot of eq (4.11)'s R(e_a^b) --
+  re-derived by hand from (4.11)/(4.12)'s structure (Ricci(free-index) =
+  sum_{summed-index} gamma^{summed}.R(e_{summed}^e_{free}), the summed index
+  occupying R's FIRST slot) and cross-checked for self-consistency against the
+  SAME convention this fix's own verification script used to independently
+  confirm the Ricci TENSOR vanishes (see below). BUT: because
+  `riemann-basis-pair` is antisymmetric (R(a^b)=-R(b^a)), swapping this
+  argument order flips the SIGN of the returned scalar -- and the ONLY
+  verification available (LDG's Schwarzschild solution) has R=0 identically,
+  so it CANNOT empirically distinguish this choice from its negative (a sign
+  error would be numerically invisible against a true-zero answer). The
+  MAGNITUDE fix above (eliminating the genuine ~1e-4 spurious asymmetric
+  Ricci-tensor component) is independently, empirically verified; THIS
+  specific sign/argument-order choice is only algebraically justified, not
+  independently numerically confirmed -- flagged honestly rather than
+  asserted with the same confidence, pending either a literature worked
+  example with a NONZERO known curvature-scalar value, or independent expert
+  review of the (4.11)/(4.12) argument-order derivation above.
 
   VERIFIED (gtg_test.cljc): 0.0, within finite-difference-truncation
   tolerance, for LDG's own Schwarzschild vacuum solution (eq 6.79) at
-  multiple test points/mass parameters -- the expected result, since a
-  vacuum solution of the field equation has zero Ricci TENSOR by
-  construction, and the Ricci SCALAR is a direct further contraction of
-  that tensor (R_ab=0 implies R=0 as a special case, needing no additional
-  vacuum-specific argument). EXACTLY 0.0 (not merely close) at the flat
-  limit h=`position-gauge-identity`, where every derivative this pipeline
-  computes vanishes identically rather than merely numerically.
+  multiple test points/mass parameters, AND (the strengthened check this fix
+  adds) the FULL Ricci TENSOR (not just its trace) is uniformly ~0 at those
+  same points, at the FD-noise floor (~1e-10, matching this pipeline's
+  documented FD tolerance elsewhere) -- the properly vacuum-consistent result
+  the buggy version's scalar-only check could not distinguish from the true
+  answer (the buggy version's spurious ~1e-4 asymmetric components were
+  ~2000x above this noise floor, not explainable as truncation error).
+  EXACTLY 0.0 (not merely close) at the flat limit h=`position-gauge-identity`,
+  where every derivative this pipeline computes vanishes identically rather
+  than merely numerically.
 
   This is the first curvature-SCALAR result this namespace's Phase 0a
   through Phase 1 history reaches -- Phase 0c's `curvature-quadratic-
@@ -1552,14 +1592,10 @@
   bare assertion, backs this function -- see gtg_test.cljc)."
   ([h-field x] (curvature-scalar h-field x default-fd-h default-fd-h))
   ([h-field x fd-h-inner fd-h-outer]
-   (let [h-x (h-field x)
-         R-mat (riemann-map-matrix h-field x fd-h-inner fd-h-outer)]
-     (reduce +
-             (for [a (range 4) b (range 4)]
-               (let [gamma-a (tensor/raise (standard-basis-vector a))
-                     gamma-b (tensor/raise (standard-basis-vector b))
-                     h-b (nth h-x b)
-                     h-a (nth h-x a)
-                     R-hb-ha (tensor/mat-vec R-mat (wedge-vectors h-b h-a))
-                     inner (vector-dot-bivector gamma-b R-hb-ha)]
-                 (tensor/dot gamma-a inner)))))))
+   (reduce +
+           (for [a (range 4) b (range 4)]
+             (let [gamma-a (tensor/raise (standard-basis-vector a))
+                   gamma-b (tensor/raise (standard-basis-vector b))
+                   R-ba (riemann-basis-pair h-field x b a fd-h-inner fd-h-outer)
+                   inner (vector-dot-bivector gamma-b R-ba)]
+                 (tensor/dot gamma-a inner))))))
