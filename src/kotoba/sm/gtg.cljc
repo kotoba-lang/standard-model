@@ -3,9 +3,29 @@
   geometric algebra') -- ROTATION-GAUGE SECTOR (Phase 0a), POSITION-GAUGE
   SECTOR (Phase 0b), A NARROWLY-SCOPED CURVATURE QUADRATIC INVARIANT
   (Phase 0c, h = position-gauge-identity ONLY -- NOT the LDG curvature
-  scalar), A GENERAL-h RECIPROCAL FRAME (Phase 0d), AND A GA-NATIVE
-  MINKOWSKI-PAIRED RECIPROCAL FRAME (Phase 0e) ONLY. See the 'Scope' section
-  of the repo README for the ADR reference.
+  scalar), A GENERAL-h RECIPROCAL FRAME (Phase 0d), A GA-NATIVE
+  MINKOWSKI-PAIRED RECIPROCAL FRAME (Phase 0e), AND -- NEW IN THIS PHASE --
+  THE VACUUM/SOURCE-FREE FIELD EQUATION Omega(h) (Phase 1) ONLY. See the
+  'Scope' section of the repo README for the ADR reference.
+
+  PHASE 1 (ADR-2607102300) is the first FIELD EQUATION implemented in this
+  namespace -- everything before it (Phase 0a-0e) built the KINEMATIC
+  machinery (gauge potentials, curvature-as-a-functional-of-a-connection,
+  reciprocal frames) without ever deriving Omega_mu FROM h_mu; Phase 1 adds
+  `omega-from-h` (LDG eq 4.53, the closed-form VACUUM/SPIN-FREE solution of
+  the rotation-gauge field equation given a position-gauge field h), the
+  covariant Riemann map `riemann-map`/`riemann-map-matrix` (eq 4.48), and
+  (having independently verified the pipeline against LDG's own Schwarzschild
+  solution to finite-difference precision, see gtg_test.cljc) the true LDG
+  Ricci SCALAR `curvature-scalar` that Phase 0c/0d/0e each investigated and
+  each declined to implement. See this namespace's 'PHASE 1' section below
+  for the full derivation and gtg_test.cljc for the Schwarzschild-solution
+  regression tests this phase is built and checked against. Phase 1 is
+  DELIBERATELY SCOPED to the VACUUM, SPIN-FREE field equation ONLY -- see
+  the PHASE 1 section's own scope note for exactly what remains out of
+  scope (matter/source coupling, the full field equation with torsion, the
+  Einstein tensor, the action principle, and any de Sitter/cosmological-
+  constant/dark-matter extension).
 
   GTG's central observation (well known in the literature, not a new result
   of this namespace) is that the restricted Lorentz group SO(1,3)+ can be
@@ -296,37 +316,127 @@
        reference value to test a candidate against), one step EARLIER in the
        pipeline (h->Omega, rather than R->scalar) -- per the task's own
        explicit instruction, this is reported honestly rather than guessed
-       at, and `curvature-scalar` remains unimplemented.
+       at, and `curvature-scalar` remains unimplemented (AS OF Phase 0e --
+       Phase 1, item 15 below, resolves exactly this blocker).
 
-  EXPLICITLY OUT OF SCOPE, NOT IMPLEMENTED HERE (Phase 0a+0b+0c+0d+0e): the
-  true Lasenby-Doran-Gull curvature scalar R (see item 10's note for exactly
-  how Phase 0c's quadratic invariant differs from it, item 11's honesty note
-  for the Phase 0d literature investigation's findings and exactly which
-  remaining step blocked implementation, and item 14 above for Phase 0e's
-  further, DECLINED attempt via independent numerical verification and
-  exactly where THAT attempt stopped);
-  the Einstein multivector, the GTG action principle and field equations, any
-  proof of equivalence to General Relativity, and any dark-matter/dark-
-  energy/de-Sitter extension. ALSO OUT OF SCOPE: the FULL combined
-  h_mu+Omega_mu GTG covariant derivative (i.e. using h to relate the
-  rotation-gauge connection to an actual spacetime-vector derivative/torsion)
-  -- this namespace's Phase-0a covariant derivative (5) and Phase-0b derived
-  metric (8) are developed independently of each other, not yet combined, and
-  Phase 0c's curvature invariant (10) is built from Phase 0a's R_mu-nu alone,
-  without reference to h at all (Phase 0d's `reciprocal-frame` and Phase 0e's
-  `reciprocal-frame-minkowski` do not change this -- neither is wired into
-  either (5) or (10), and item 14 above records exactly why Phase 0e could not
-  bridge this gap either). Those are legitimate, much larger follow-up
-  efforts, deliberately deferred to a later phase (Phase 0f or beyond) --
-  this namespace is a limited, literature-faithful port of the rotation-gauge
-  and position-gauge SECTORS, one narrowly-scoped curvature invariant, and
-  two dual-basis reciprocal-frame constructions (plain-pairing and
-  Minkowski-pairing) ONLY, and must not be read as 'GTG is implemented here'
-  or as any kind of gravity engine."
+  PHASE 1 (field equation Omega(h), the covariant Riemann map, and the true
+  LDG Ricci scalar -- ADR-2607102300) adds:
+    15. `omega-from-h`: the VACUUM, SPIN-FREE closed-form solution of the
+       rotation-gauge field equation, LDG eq (4.53)
+       omega(a) = -H(a) + (1/2) a.(d_b^H(b)), with
+       H(a) = hbar(grad ^ hbar^-1(a))  (eq 4.49, `H-field`) and
+       hbar = `frame-adjoint` of the position-gauge field h (eq 2.46,
+       a.f(b)=fbar(a).b -- the SAME adjoint relation used throughout this
+       namespace's Phase 0d/0e reciprocal-frame work, applied here to h
+       itself rather than to a constant matrix VALUE). Takes an h-FIELD
+       (x -> 4x4 matrix, SAME shape as `derived-metric-field`'s h-field
+       argument) and a spacetime point x, returns Omega_mu(x) (a 4x6 array,
+       the SAME shape `rotation-field-strength` already consumes) --
+       THIS IS THE FIRST TIME IN THIS NAMESPACE Omega_mu IS DERIVED FROM h_mu
+       RATHER THAN SUPPLIED INDEPENDENTLY. The closed form was derived from
+       LDG eqs (4.42)/(4.46)/(4.48)/(4.49)/(4.53) and cross-derived via an
+       independent, standalone Python/numpy+sympy verification script
+       (checked into the task's scratchpad, not this repo) that reproduces
+       LDG's own closed-form Schwarzschild solution (eq 6.73) to ~1e-13
+       (machine/finite-difference-truncation precision) BEFORE any of this
+       namespace's Clojure code was written -- see gtg_test.cljc's
+       Schwarzschild-solution regression tests for the SAME check ported to
+       this codebase's 4x4-matrix/6-component-bivector representation.
+       `H-field`, `bivector-commutator`, `wedge-vectors`,
+       `vector-dot-bivector`, `bivector->matrix`, `matrix->bivector` are the
+       minimal new GA-flavored primitives this required (NOT a general
+       from-scratch geometric-algebra engine -- see this function's own
+       docstring and the PHASE 1 header comment below for exactly which
+       identity each one implements and how each was independently
+       numerically cross-checked before being trusted).
+    16. `riemann-basis-pair`/`riemann-map-matrix`/`riemann-map`: the
+       COVARIANT Riemann map R(a^b), LDG eq (4.48)
+       R(a^b) = L_a omega(b) - L_b omega(a) + omega(a)xomega(b) - omega(c(a,b)),
+       c(a,b) = a.omega(b) - b.omega(a) (eq 4.46, valid for POSITION-
+       INDEPENDENT a,b), L_a = a.hbar(grad) = h(a).grad (eq 4.42, the
+       identity a.hbar(grad)=h(a).grad -- L_a is the ordinary directional
+       derivative of the omega FIELD along h(a)(x), NOT the flat d_mu of
+       Phase 0a's `rotation-gauge-field-gradient`/`rotation-field-strength`
+       -- see `riemann-basis-pair`'s own docstring for why these are
+       genuinely DIFFERENT connections and reusing Phase 0a's machinery here
+       would be WRONG, the exact silent failure mode (identically-zero,
+       teleparallel curvature) an earlier investigation hit and diagnosed,
+       see the standalone verification script's own header comment).
+       `riemann-map`/`riemann-map-matrix` extend R to a genuine LINEAR map
+       on the full 6-dimensional bivector space (R is defined on the basis
+       bivectors e_mu^e_nu by eq 4.48, and a linear map is fully determined
+       by its action on a basis), so `riemann-map` accepts ANY bivector
+       argument, including one built from POSITION-DEPENDENT vectors (e.g.
+       `wedge-vectors` of two position-gauge-field rows h_mu(x), needed by
+       item 17 below) -- not just a fixed-frame basis pair.
+    17. `curvature-scalar`: the TRUE Lasenby-Doran-Gull Ricci SCALAR
+       R = sum_{a,b} gamma^a.(gamma^b.R(h_b^h_a)) -- the formula Phase 0d
+       stage 2 (item 12 above) and Phase 0e (item 14 above) each
+       independently confirmed the STRUCTURE of (two independent primary
+       literature sources agreeing) but declined to implement, because
+       translating 'gamma^b.R(h_b^h_a)' into this codebase's array
+       representation needed a bilinear extension of R to GENERAL (not
+       basis-pair) bivectors that did not exist yet. Item 16's `riemann-map`
+       supplies exactly that missing piece, so this formula is now directly
+       transcribable with no remaining index/sign ambiguity: gamma^a =
+       `tensor/raise` of the FIXED background basis vector e_a (trivial
+       under the metric, confirmed by BOTH literature sources to be the
+       correct outer-contraction frame -- NOT `reciprocal-frame`/
+       `reciprocal-frame-minkowski`, which are reciprocal frames OF h, a
+       DIFFERENT and NOT-needed-here construction, per item 12's finding);
+       h_b = h-field(x)[b] = h(e_b) (Phase 0b's existing `h`); R(h_b^h_a) is
+       `riemann-map` applied to `wedge-vectors(h_b,h_a)`. VERIFIED
+       (gtg_test.cljc): matches 0.0 (LDG's own vacuum Ricci-scalar
+       expectation for the Schwarzschild solution -- a vacuum solution of
+       Einstein's equation has R_ab=0, hence R=0 as a direct special case)
+       to within finite-difference-truncation tolerance at the SAME
+       Schwarzschild test points item 15/16 are checked against, and EXACTLY
+       0.0 (not merely close) at the flat limit (h=`position-gauge-identity`,
+       where every derivative involved vanishes identically, not just
+       numerically). This is honestly the FIRST curvature-scalar result in
+       this namespace's whole Phase 0a-1 history that Phase 0c, Phase 0d
+       stage 2, and Phase 0e's stage-2 investigation each in turn declined
+       to reach -- reached here only because item 16 removed the specific,
+       previously-unverifiable index/sign step that blocked every prior
+       attempt, not by relaxing this namespace's verification discipline.
+
+    PHASE 1 SCOPE NOTE: `omega-from-h`/`curvature-scalar` implement ONLY the
+    VACUUM (source-free, T_ab=0), SPIN-FREE (no intrinsic angular-momentum
+    matter coupling) closed-form solution (eq 4.53) -- NOT the general GTG
+    field equation with a matter/torsion source term, NOT the Einstein
+    tensor/multivector G(a) (needed to couple to a general stress-energy
+    tensor), NOT the GTG action principle (the Lagrangian this closed form
+    is the EULER-LAGRANGE solution of is not derived or checked here), and
+    verified against exactly ONE known exact solution (Schwarzschild,
+    Painleve-Gullstrand/Newtonian gauge) -- NOT a general proof that this
+    namespace's pipeline reproduces GR for arbitrary h. See the EXPLICITLY
+    OUT OF SCOPE paragraph below for the full list still deferred.
+
+  EXPLICITLY OUT OF SCOPE, NOT IMPLEMENTED HERE (Phase 0a+0b+0c+0d+0e+1):
+  the Einstein tensor/multivector G(a), the GTG action principle, the general
+  (matter/torsion-sourced) field equation (only the vacuum/spin-free closed
+  form (4.53) is implemented, item 15 above), any proof of equivalence to
+  General Relativity for GENERAL h (item 17's `curvature-scalar` is verified
+  against exactly one known exact solution, not a general equivalence proof),
+  and any dark-matter/dark-energy/de-Sitter extension. ALSO OUT OF SCOPE: a
+  general (non-vacuum) combined h_mu+Omega_mu GTG covariant derivative with
+  torsion -- Phase 0a's covariant derivative (5) still stands independently
+  of the vacuum connection Phase 1 derives (5) was built for a SUPPLIED
+  Omega_mu, not the field-equation solution; wiring Phase 1's `omega-from-h`
+  into (5) to get a genuine matter-coupled covariant Dirac equation in curved
+  spacetime is a legitimate, much larger follow-up, deliberately deferred to
+  a later phase. This namespace is a limited, literature-faithful port of the
+  rotation-gauge and position-gauge SECTORS, one narrowly-scoped curvature
+  invariant, two dual-basis reciprocal-frame constructions (plain-pairing and
+  Minkowski-pairing), and the VACUUM/SPIN-FREE field equation with its
+  covariant Riemann map and Ricci scalar ONLY, and must not be read as 'GTG
+  is fully implemented here' or as any kind of general-purpose gravity
+  engine."
   (:require [kotoba.sm.complex :as c]
             [kotoba.sm.tensor :as tensor]
             [kotoba.sm.spinor :as spinor]
-            [kotoba.sm.gauge :as gauge]))
+            [kotoba.sm.gauge :as gauge]
+            [kotoba.sm.vector-field :as vf]))
 
 (defn- abs-num [x] (if (neg? x) (- x) x))
 
@@ -996,3 +1106,460 @@
   ([h] (reciprocal-frame-minkowski h 1e-9))
   ([h eps]
    (tensor/mat-mat (tensor/mat-transpose (tensor/mat-inverse h eps)) tensor/metric)))
+
+;; ---------------------------------------------------------------------------
+;; PHASE 1 -- the vacuum/spin-free field equation Omega(h) (eq 4.53), the
+;;    covariant Riemann map R(a^b) (eq 4.48), and the true LDG Ricci scalar
+;;    (item 15/16/17 above). See the namespace docstring's PHASE 1 section
+;;    for the full scope statement and literature derivation; this section's
+;;    per-function docstrings carry the exact formula and verification notes.
+;;
+;;    DATA REPRESENTATION, kept deliberately close to Phase 0a-0e: a bivector
+;;    is a 6-component real vector in `generator-index-pairs` order (the SAME
+;;    shape Omega_mu/R_mu-nu^k already use); a position-gauge field VALUE is
+;;    a 4x4 real matrix, row mu = h(e_mu) (the SAME STORED layout `h`,
+;;    `position-gauge-identity`, `derived-metric` already use); a
+;;    position-gauge FIELD is a function x -> that 4x4 matrix (the SAME shape
+;;    `derived-metric-field`'s `h-field` argument already uses). No new
+;;    multivector/full-geometric-algebra representation is introduced -- the
+;;    handful of primitives below (`frame-adjoint`, `bivector->matrix`,
+;;    `matrix->bivector`, `wedge-vectors`, `vector-dot-bivector`,
+;;    `bivector-commutator`) are the MINIMAL set needed to transcribe LDG's
+;;    eqs (4.42)/(4.46)/(4.48)/(4.49)/(4.53), each one independently
+;;    numerically cross-checked (not merely hand-derived) against a
+;;    standalone Python/numpy geometric-algebra reference engine before being
+;;    trusted here -- see each function's own docstring for exactly which
+;;    identity it implements.
+;;
+;;    NUMERICAL METHOD: both the position-gauge field `h` and the rotation-
+;;    gauge field this phase derives from it, Omega(h), are evaluated purely
+;;    numerically (central finite differences, `kotoba.sm.vector-field`'s
+;;    existing `four-gradient-vec` for the INNER derivative inside `H-field`,
+;;    `kotoba.sm.gauge`'s existing `gauge-field-gradient` for the OUTER
+;;    derivative inside `L-a-omega`) -- there is no symbolic-differentiation
+;;    layer in this codebase (see `kotoba.sm.vector-field`'s own namespace
+;;    docstring). This means BOTH derivative levels needed by eq (4.49)'s
+;;    curl-of-hbar-inverse (inner) and eq (4.48)'s L_a (outer) carry their
+;;    own finite-difference truncation error, and the two compound. The
+;;    default step sizes below (`default-fd-h` = 2e-4 at BOTH levels) were
+;;    picked by an independent numerical experiment (the same standalone
+;;    Python verification script, run with FD substituted for its otherwise-
+;;    symbolic inner derivative, to confirm the FD/FD pipeline this namespace
+;;    actually uses -- not the symbolic/FD hybrid the reference script uses
+;;    by default -- still reproduces LDG's closed-form Schwarzschild solution
+;;    to ~1e-9..1e-10, well within gtg_test.cljc's ~1e-9 tolerance) rather
+;;    than guessed at; see gtg_test.cljc's own Schwarzschild-regression tests
+;;    for the achieved precision on THIS codebase's actual Clojure
+;;    implementation. Every function below takes `fd-h`/`fd-h-inner`+
+;;    `fd-h-outer` as explicit optional arguments (no dynamic-var coupling
+;;    leaks across this section's public API) so a caller needing tighter or
+;;    looser precision, or a smoother/rougher field, can override the
+;;    default.
+;; ---------------------------------------------------------------------------
+
+(def default-fd-h
+  "Default central-finite-difference step used at BOTH derivative levels
+  (`H-field`'s inner curl, `L-a-omega`'s outer directional derivative) by
+  every Phase 1 function's zero/two-arg arity -- see this section's header
+  comment for how this value was picked."
+  2.0e-4)
+
+(defn- standard-basis-vector
+  "e_mu as an ordinary 4-component vector (e.g. mu=1 -> [0.0 1.0 0.0 0.0]),
+  mu in 0..3. Internal helper -- Phase 1's vector/bivector primitives below
+  are built on top of this rather than a symbolic 'gamma_mu' object."
+  [mu]
+  (assoc [0.0 0.0 0.0 0.0] mu 1.0))
+
+(defn frame-adjoint
+  "The GTG/Clifford-algebra adjoint fbar of a position-gauge-field-SHAPED 4x4
+  matrix VALUE `f` (`f[mu][nu]` = f_mu^nu, row mu = f(e_mu) -- the SAME
+  STORED layout `h`/`position-gauge-identity`/`derived-metric` already use),
+  defined by LDG eq (2.46): a.f(b) = fbar(a).b for all vectors a,b (`.` =
+  `kotoba.sm.tensor/dot`, the Minkowski invariant inner product) -- the SAME
+  adjoint relation Phase 0d/0e's reciprocal-frame derivations already invoke
+  (`reciprocal-frame`/`reciprocal-frame-minkowski`'s own docstrings), applied
+  here to a general FIELD VALUE `f` (needed: hbar := frame-adjoint of h)
+  rather than only ever appearing inside a reciprocal-frame formula.
+
+  DERIVATION: write `f` as a 4x4 matrix F (row mu = f(e_mu), this namespace's
+  STORED convention) and STANDARD-CONVENTION matrix M_f (M_f @ a = f(a) for a
+  a column vector) -- since row mu of F is f(e_mu) = column mu of M_f,
+  M_f = `tensor/mat-transpose` F. Component-by-component, a.f(b) = fbar(a).b
+  is a^T eta (M_f b) = (M_fbar a)^T eta b for all a,b, i.e. the matrix
+  equation eta M_f = M_fbar^T eta, so M_fbar = eta M_f^T eta (eta is its own
+  inverse in this basis) = eta @ F @ eta (since M_f^T = F). Converting back
+  to STORED form (fbar's row mu = fbar(e_mu) = column mu of M_fbar, i.e.
+  `tensor/mat-transpose` M_fbar): Fbar = (eta @ F @ eta)^T = eta @ F^T @ eta
+  (eta symmetric). This function computes exactly that: `tensor/mat-mat`
+  `tensor/metric` ( `tensor/mat-mat` (`tensor/mat-transpose` f) `tensor/metric` ).
+
+  SELF-INVERSE (`frame-adjoint` (`frame-adjoint` f) = f, an algebraic
+  consequence of eq 2.46 being symmetric under swapping f<->fbar and a<->b,
+  NOT merely a coincidence of this codebase's convention): applying the
+  formula twice, Fbarbar = eta @ Fbar^T @ eta = eta @ (eta F^T eta)^T @ eta =
+  eta @ eta @ F @ eta @ eta = F (eta@eta=I). This means the SAME function
+  both derives hbar from a h-FIELD (Phase 1's actual production use, inside
+  `H-field`) and, symmetrically, can recover h from a literature hbar-first
+  solution like LDG's own Schwarzschild eq (6.79) (used in gtg_test.cljc to
+  build the test's h-field from the paper's hbar-first statement of that
+  solution) -- gtg_test.cljc numerically verifies BOTH the involution
+  property and, independently, that this formula reproduces a ground-truth
+  h<->hbar pair computed via a standalone (Python/numpy) implementation of
+  the SAME eq-(2.46) derivation, to machine precision."
+  [f]
+  (tensor/mat-mat tensor/metric (tensor/mat-mat (tensor/mat-transpose f) tensor/metric)))
+
+(defn bivector->matrix
+  "A 6-component bivector (`generator-index-pairs` order) -> the antisymmetric
+  4x4 matrix it represents (Bmat[a][b] = B[k] for (a,b) = `generator-index-
+  pairs`[k], Bmat[b][a] = -B[k], Bmat[a][a] = 0) -- the same convention a
+  Python ga_algebra reference implementation's `bivector_to_matrix` uses,
+  independently cross-checked against it. `matrix->bivector` is the inverse."
+  [b]
+  (reduce (fn [m [[a bb] val]]
+            (-> m (assoc-in [a bb] val) (assoc-in [bb a] (- val))))
+          (vec (repeat 4 (vec (repeat 4 0.0))))
+          (map vector generator-index-pairs b)))
+
+(defn matrix->bivector
+  "An antisymmetric 4x4 matrix -> the 6-component bivector (`generator-index-
+  pairs` order) it represents -- reads off `m[a][b]` for each (a,b) =
+  `generator-index-pairs`[k]. Inverse of `bivector->matrix`."
+  [m]
+  (mapv (fn [[a bb]] (get-in m [a bb])) generator-index-pairs))
+
+(defn wedge-vectors
+  "u^v, the outer/wedge product of two ordinary 4-vectors u,v, as a
+  6-component bivector: (u^v)_k = u[a]*v[b] - u[b]*v[a] for (a,b) =
+  `generator-index-pairs`[k] -- the standard GA wedge product of two grade-1
+  blades, independently cross-checked against a Python ga_algebra reference
+  engine's `wedge` on random vector pairs."
+  [u v]
+  (mapv (fn [[a b]] (- (* (nth u a) (nth v b)) (* (nth u b) (nth v a)))) generator-index-pairs))
+
+(defn vector-dot-bivector
+  "v.B, the Hestenes inner product of an ordinary 4-vector v with a
+  6-component bivector B, producing a vector: (v.B)^beta = sum_rho v_rho
+  Bmat[rho][beta], v_rho = `tensor/lower` v (the standard GA grade-lowering
+  contraction <vB>_1). DERIVATION: writing B as its antisymmetric matrix
+  representation (`bivector->matrix`), this is the row-vector-times-matrix
+  product `tensor/lower`(v) @ Bmat, i.e. `tensor/mat-vec` applied to
+  `tensor/mat-transpose` of Bmat (so that summing over the FIRST matrix index
+  against `tensor/lower`(v) lands in the right slot) -- independently cross-
+  checked against a Python ga_algebra reference engine's `idot(v,B,1,2)` on
+  both physically-generated and random bivectors."
+  [v b]
+  (tensor/mat-vec (tensor/mat-transpose (bivector->matrix b)) (tensor/lower v)))
+
+(defn bivector-commutator
+  "[B1,B2], the so(1,3) Lie bracket ('omega(a) x omega(b)' in LDG notation)
+  of two bivector-coefficient-vectors B1,B2 (6-component, `generator-index-
+  pairs` order): [B1,B2][a] = sum_{b,c} f-abc[b][c][a] B1[b] B2[c] -- the
+  SAME f-abc[b][c][a] slot convention `kotoba.sm.gauge/self-interaction-term`
+  already established for exactly this so(1,3) self-interaction structure
+  (its own docstring has the derivation of why the output/target index sits
+  in the THIRD slot for this generator set's non-uniform trace-Gram matrix);
+  `f-abc` is `rotation-raw-structure-constants`. This is the REAL-coefficient
+  (not complex-matrix) realization of the bivector cross product, already
+  implicitly trusted by `rotation-field-strength`'s self-interaction term
+  (Phase 0a) -- reused here as a standalone operation on two ARBITRARY
+  bivectors (not necessarily Omega_mu, Omega_nu at fixed spacetime indices)."
+  [f-abc B1 B2]
+  (vec (for [a (range 6)]
+         (reduce + (for [b (range 6) cc (range 6)]
+                     (* (get-in f-abc [b cc a]) (nth B1 b) (nth B2 cc)))))))
+
+(defn- congruence
+  "F @ M @ F^T for 4x4 matrices F,M -- the matrix congruence transform
+  underlying the outermorphism extension of a linear map to a bivector
+  (`outermorphism` below). Internal-use helper (no independent GA meaning at
+  this general-matrix level; `outermorphism` is the named, tested GA
+  operation)."
+  [F M]
+  (tensor/mat-mat (tensor/mat-mat F M) (tensor/mat-transpose F)))
+
+(defn outermorphism
+  "F(B), the outermorphism extension of a linear map to a bivector B
+  (6-component): if F is a linear map with F(u^v) = F(u)^F(v) for vectors
+  u,v, then in matrix form (F given in STANDARD convention, F @ a = F(a) for
+  a column vector a; B given via `bivector->matrix`), F(B)'s matrix is the
+  congruence transform F @ Bmat @ F^T -- independently cross-checked against
+  a Python ga_algebra reference engine's `outermorphism` (same congruence
+  formula) on both physically-generated and random (F,B) pairs. Used by
+  `H-field` to apply hbar (as an outermorphism) to the curl bivector."
+  [F-standard b]
+  (matrix->bivector (congruence F-standard (bivector->matrix b))))
+
+(defn H-field
+  "H(e_mu), mu=0..3, LDG eq (4.49) first form: H(a) = hbar(grad ^ hbar^-1(a)),
+  for a position-gauge FIELD `h-field` (x -> 4x4 matrix, STORED convention,
+  SAME shape `derived-metric-field`'s `h-field` argument), at spacetime point
+  `x`. Returns a 4-element vector of 6-component bivectors,
+  [H(e_0) H(e_1) H(e_2) H(e_3)].
+
+  For each fixed frame vector a=e_mu (a is held CONSTANT, i.e. NOT itself
+  position-dependent -- only hbar^-1 is differentiated): `grad ^ hbar^-1(a)`
+  is the curl (antisymmetrized gradient) of the VECTOR FIELD x -> hbar^-1(a)
+  at x, computed here via `kotoba.sm.vector-field/four-gradient-vec`
+  (`vf/*h*` bound to `fd-h` for the duration of this call -- the INNER
+  derivative level, see this section's header comment); hbar^-1(a) at a
+  point xx is `(tensor/mat-vec (tensor/mat-inverse (tensor/mat-transpose
+  (frame-adjoint (h-field xx)))) a)` (the STANDARD-convention matrix inverse
+  of hbar, applied to a). The curl, C[alpha][beta] = eta_alpha
+  d_alpha(hbar^-1(a))^beta - eta_beta d_beta(hbar^-1(a))^alpha, is exactly
+  `grad^V` for a vector field V written out in components (`grad` = the
+  Dirac/vector derivative gamma^mu d_mu = sum_mu eta_mu gamma_mu d_mu) --
+  independently cross-checked against a Python ga_algebra reference engine's
+  symbolic-derivative version of the SAME curl on the Schwarzschild solution.
+  Then hbar is applied to that curl bivector via `outermorphism`, using hbar
+  EVALUATED AT x (not differentiated, the OUTER hbar application in eq
+  4.49 is NOT part of the derivative)."
+  ([h-field x] (H-field h-field x default-fd-h))
+  ([h-field x fd-h]
+   (let [hbar-x (frame-adjoint (h-field x))
+         M-hbar-x (tensor/mat-transpose hbar-x)] ;; standard conv: M-hbar-x @ a = hbar(a)
+     (vec
+      (for [mu (range 4)]
+        (let [a (standard-basis-vector mu)
+              hbar-inv-of-a (fn [xx]
+                               (let [hbar-xx (frame-adjoint (h-field xx))
+                                     M-hbar-xx (tensor/mat-transpose hbar-xx)
+                                     M-hbar-inv (tensor/mat-inverse M-hbar-xx)]
+                                 (tensor/mat-vec M-hbar-inv a)))
+              J (binding [vf/*h* fd-h] (vf/four-gradient-vec hbar-inv-of-a x))
+              ;; J[alpha][beta] = d (hbar^-1 a)^beta / dx^alpha
+              C (vec (for [alpha (range 4)]
+                       (vec (for [beta (range 4)]
+                              (- (* (eta alpha alpha) (get-in J [alpha beta]))
+                                 (* (eta beta beta) (get-in J [beta alpha])))))))]
+          (matrix->bivector (congruence M-hbar-x C))))))))
+
+(defn omega-from-h
+  "The VACUUM, SPIN-FREE closed-form solution of the rotation-gauge field
+  equation, LDG eq (4.53): omega(a) = -H(a) + (1/2) a.(d_b^H(b)). For a
+  position-gauge FIELD `h-field` (SAME shape `H-field`/`derived-metric-field`
+  take), at spacetime point `x`, returns Omega_mu(x) = omega(e_mu) for
+  mu=0..3 as a 4x6 array -- the SAME shape `rotation-field-strength` already
+  consumes as its `Omega` argument, and `rotation-gauge-field-gradient`/
+  `rotation-field-strength` already consume as an `Omega-field`'s per-point
+  value.
+
+  DERIVATION of the closed form actually implemented below (a.(d_b^H(b)) is
+  a vector-dot-trivector contraction LDG's own GA notation leaves implicit;
+  this codebase deliberately does NOT introduce a trivector representation
+  -- see this section's header comment -- so the closed form is rewritten,
+  via the standard GA identity a.(u^B) = (a.u)B - u^(a.B) for vector a,u and
+  bivector B (independently numerically cross-checked against a Python
+  ga_algebra reference engine's `idot`/`wedge` on random bivectors before
+  being trusted), applied term-by-term to d_b^H(b) = sum_nu eta_nu
+  e_nu^H(e_nu):
+
+    a.(d_b^H(b)) = sum_nu eta_nu [ (a.e_nu)H(e_nu) - e_nu^(a.H(e_nu)) ]
+
+  For a=e_mu, (a.e_nu) = eta_mu delta_{mu,nu}, so the first term's sum
+  collapses to the single nu=mu term, eta_mu*eta_mu*H(e_mu) = H(e_mu)
+  (eta_mu^2=1). Substituting back into (4.53) and simplifying (both
+  independently re-derived by hand AND numerically verified end-to-end
+  against the SAME Python ga_algebra reference engine's direct trivector
+  computation, to floating-point-exact agreement on random test bivectors,
+  before being trusted here):
+
+    omega(e_mu) = -(1/2)H(e_mu) - (1/2) sum_nu eta_nu (e_nu ^ (e_mu.H(e_nu)))
+
+  `e_mu.H(e_nu)` is `vector-dot-bivector`; `e_nu ^ (...)` is `wedge-vectors`.
+  `fd-h` is the finite-difference step passed straight through to `H-field`
+  (the ONLY differentiation this function itself performs is inside
+  `H-field` -- `omega-from-h` itself has no additional derivative)."
+  ([h-field x] (omega-from-h h-field x default-fd-h))
+  ([h-field x fd-h]
+   (let [Hs (H-field h-field x fd-h)]
+     (vec
+      (for [mu (range 4)]
+        (let [e-mu (standard-basis-vector mu)
+              H-mu (nth Hs mu)
+              correction (reduce
+                          (fn [acc nu]
+                            (let [e-nu (standard-basis-vector nu)
+                                  v-dot-B (vector-dot-bivector e-mu (nth Hs nu))
+                                  w (wedge-vectors e-nu v-dot-B)]
+                              (tensor/v+ acc (tensor/v-scale (eta nu nu) w))))
+                          (vec (repeat 6 0.0))
+                          (range 4))]
+          (tensor/v+ (tensor/v-scale -0.5 H-mu) (tensor/v-scale -0.5 correction))))))))
+
+(defn L-a-omega
+  "L_{e_a-idx} omega(e_nu) for all nu=0..3, LDG eq (4.42): L_a := a.hbar(grad)
+  -- via the identity a.hbar(grad) = h(a).grad (h = `frame-adjoint` of hbar,
+  independently confirmed against a standalone Python/numpy reference
+  computation before being trusted -- see `frame-adjoint`'s own docstring),
+  i.e. L_a is the ordinary DIRECTIONAL DERIVATIVE of the omega FIELD
+  (`omega-from-h`) along the vector h(e_a-idx)(x) = row `a-idx` of
+  `h-field`(x).
+
+  *** DELIBERATELY NOT Phase 0a's flat d_mu: *** this is a GENUINELY
+  DIFFERENT differential operator from `rotation-gauge-field-gradient`'s
+  ordinary partial derivative along the FIXED coordinate axis e_mu -- L_a
+  differentiates along the (position-dependent, curved) vector FIELD h(a)(x)
+  instead. Reusing Phase 0a's flat-d_mu-based `rotation-field-strength`
+  machinery here (i.e. solving the field equation with the ROTATION-gauge-
+  only-covariant D_mu = d_mu + Omega_mu x of eq 3.26 in place of the
+  POSITION-gauge-covariant calligraphic-D of eq 3.72-3.78 this phase
+  actually needs) was independently tried and diagnosed as the exact
+  silent-failure mode this namespace's Phase 1 work deliberately avoids: it
+  constructs a Weitzenbock/teleparallel connection that is a pure gauge
+  transform of the flat connection, whose curvature is IDENTICALLY ZERO by
+  construction for ANY h -- not a sign/convention slip, a structurally wrong
+  equation (documented in the standalone verification script this phase's
+  formulas were cross-checked against, not re-derived from scratch here).
+
+  `d-omega[rho][nu][k]` = d Omega_nu^k / dx^rho, via
+  `kotoba.sm.gauge/gauge-field-gradient` applied to the FIELD
+  x -> (omega-from-h h-field x fd-h-inner) -- the OUTER derivative level
+  (`fd-h-outer`, see this section's header comment). Returns a 4x6 array,
+  row nu = L_{e_a-idx} omega(e_nu)."
+  ([h-field x a-idx] (L-a-omega h-field x a-idx default-fd-h default-fd-h))
+  ([h-field x a-idx fd-h-inner fd-h-outer]
+   (let [Omega-fn (fn [xx] (omega-from-h h-field xx fd-h-inner))
+         d-omega (gauge/gauge-field-gradient Omega-fn x fd-h-outer)
+         direction (nth (h-field x) a-idx)]
+     (vec
+      (for [nu (range 4)]
+        (reduce (fn [acc rho]
+                  (tensor/v+ acc (tensor/v-scale (nth direction rho) (get-in d-omega [rho nu]))))
+                (vec (repeat 6 0.0))
+                (range 4)))))))
+
+(defn riemann-basis-pair
+  "R(e_mu ^ e_nu), the COVARIANT Riemann map, LDG eq (4.48):
+
+    R(a^b) = L_a omega(b) - L_b omega(a) + omega(a) x omega(b) - omega(c(a,b))
+    c(a,b) = a.omega(b) - b.omega(a)                                   (4.46)
+
+  for a GENERAL invertible position-gauge FIELD `h-field`, at spacetime point
+  `x`, with a=e_mu, b=e_nu FIXED (position-INDEPENDENT) frame vectors -- eq
+  (4.46)'s c(a,b) formula is valid exactly in this case (LDG's own note that
+  L_a b = L_b a = 0 for a,b treated as independent of position, i.e. NOT
+  vector FIELDS being differentiated themselves). `mu`,`nu` range over ALL of
+  0..3 (not restricted to mu<nu): R(e_nu^e_mu) = -R(e_mu^e_nu) and
+  R(e_mu^e_mu) = 0 hold AUTOMATICALLY as an algebraic consequence of (4.48)'s
+  own antisymmetry in a,b (swap a<->b: the L-term negates and swaps, the
+  commutator negates by antisymmetry, and omega(c(b,a)) = omega(-c(a,b)) =
+  -omega(c(a,b)) since c(b,a)=-c(a,b) and omega is LINEAR -- so the whole
+  RHS negates) -- NOT separately enforced/special-cased below.
+
+  `omega(a)xomega(b)` is `bivector-commutator` (using
+  `rotation-raw-structure-constants`); `a.omega(b)` is `vector-dot-bivector`;
+  `omega(c(a,b))`, since omega is LINEAR in its argument, is
+  `sum_rho c(a,b)^rho * omega(e_rho)` (a linear combination of the ALREADY-
+  computed omega field values at x, not a fresh `omega-from-h` call on a
+  non-basis vector).
+
+  Independently numerically cross-checked (both this closed-form derivation
+  and its finite-difference-based Clojure translation) against LDG's own
+  Schwarzschild solution (eq 6.73) via a standalone Python/numpy verification
+  script BEFORE this Clojure port was written -- see gtg_test.cljc for the
+  same check ported to this codebase."
+  ([h-field x mu nu] (riemann-basis-pair h-field x mu nu default-fd-h default-fd-h))
+  ([h-field x mu nu fd-h-inner fd-h-outer]
+   (let [f-abc (rotation-raw-structure-constants)
+         omega-x (omega-from-h h-field x fd-h-inner)
+         om-mu (nth omega-x mu)
+         om-nu (nth omega-x nu)
+         La-omega-b (nth (L-a-omega h-field x mu fd-h-inner fd-h-outer) nu)
+         Lb-omega-a (nth (L-a-omega h-field x nu fd-h-inner fd-h-outer) mu)
+         comm (bivector-commutator f-abc om-mu om-nu)
+         e-mu (standard-basis-vector mu)
+         e-nu (standard-basis-vector nu)
+         c-vec (tensor/v- (vector-dot-bivector e-mu om-nu) (vector-dot-bivector e-nu om-mu))
+         omega-c (reduce (fn [acc rho]
+                            (tensor/v+ acc (tensor/v-scale (nth c-vec rho) (nth omega-x rho))))
+                          (vec (repeat 6 0.0))
+                          (range 4))]
+     (tensor/v- (tensor/v+ (tensor/v- La-omega-b Lb-omega-a) comm) omega-c))))
+
+(defn riemann-map-matrix
+  "The covariant Riemann map R: bivectors -> bivectors (LDG eq 4.48) as a 6x6
+  real matrix, at spacetime point `x` for position-gauge FIELD `h-field` --
+  column k = R(`generator-index-pairs`[k]) (`riemann-basis-pair` on each of
+  the 6 canonical basis-bivector pairs). R is LINEAR on the 6-dimensional
+  bivector space (eq 4.48 is bilinear in its vector-argument slots a,b when
+  those are basis vectors, and {e_mu^e_nu} spans the whole bivector space),
+  so a linear map is fully determined by its action on that basis -- hence
+  `(tensor/mat-vec (riemann-map-matrix h-field x) B)` gives R(B) for ANY
+  6-component bivector B, not only a basis pair (see `riemann-map` below)."
+  ([h-field x] (riemann-map-matrix h-field x default-fd-h default-fd-h))
+  ([h-field x fd-h-inner fd-h-outer]
+   (tensor/mat-transpose
+    (vec (for [[mu nu] generator-index-pairs]
+           (riemann-basis-pair h-field x mu nu fd-h-inner fd-h-outer))))))
+
+(defn riemann-map
+  "R(B), the covariant Riemann map (LDG eq 4.48) applied to a GENERAL
+  6-component bivector B (not necessarily a basis pair -- e.g. one built via
+  `wedge-vectors` from two arbitrary, possibly position-dependent vectors,
+  the case `curvature-scalar` below needs) -- `(tensor/mat-vec
+  (riemann-map-matrix h-field x fd-h-inner fd-h-outer) B)`."
+  ([h-field x B] (riemann-map h-field x B default-fd-h default-fd-h))
+  ([h-field x B fd-h-inner fd-h-outer]
+   (tensor/mat-vec (riemann-map-matrix h-field x fd-h-inner fd-h-outer) B)))
+
+(defn curvature-scalar
+  "The TRUE Lasenby-Doran-Gull Ricci SCALAR,
+
+    R = sum_{a,b=0}^{3} gamma^a . (gamma^b . R(h_b ^ h_a))
+
+  -- the formula Phase 0d stage 2 (`reciprocal-frame`'s own docstring's
+  FOLLOW-UP LITERATURE CHECK) confirmed the STRUCTURE of from two independent
+  primary sources (Lasenby/Doran/Gull 1998/gr-qc/0405033 section 4; Lewis/
+  Doran/Lasenby gr-qc/9910039 section 2) but declined to implement because
+  translating 'gamma^b.R(h_b^h_a)' into this codebase's array representation
+  needed a bilinear extension of R to GENERAL (non-basis-pair) bivectors that
+  did not exist at the time. `riemann-map` (item 16) now supplies exactly
+  that missing piece, closing the gap with NO remaining index/sign ambiguity:
+
+    gamma^a = `tensor/raise` of the FIXED background orthonormal basis
+      vector e_a -- trivial under the Minkowski metric (BOTH literature
+      sources agree this outer contraction uses the fixed frame's OWN
+      reciprocal, NOT a reciprocal frame OF h -- i.e. NOT
+      `reciprocal-frame`/`reciprocal-frame-minkowski`, a DIFFERENT
+      construction `reciprocal-frame`'s own docstring already found does
+      NOT belong here).
+    h_b = `h-field`(x)[b] = h(e_b), Phase 0b's existing position-gauge field.
+    R(h_b^h_a) = `riemann-map` applied to `wedge-vectors`(h_b,h_a) -- h_b,h_a
+      are position-gauge-field ROWS, not fixed frame vectors, so this is
+      necessarily the GENERAL-bivector form of `riemann-map`, not
+      `riemann-basis-pair`.
+
+  VERIFIED (gtg_test.cljc): 0.0, within finite-difference-truncation
+  tolerance, for LDG's own Schwarzschild vacuum solution (eq 6.79) at
+  multiple test points/mass parameters -- the expected result, since a
+  vacuum solution of the field equation has zero Ricci TENSOR by
+  construction, and the Ricci SCALAR is a direct further contraction of
+  that tensor (R_ab=0 implies R=0 as a special case, needing no additional
+  vacuum-specific argument). EXACTLY 0.0 (not merely close) at the flat
+  limit h=`position-gauge-identity`, where every derivative this pipeline
+  computes vanishes identically rather than merely numerically.
+
+  This is the first curvature-SCALAR result this namespace's Phase 0a
+  through Phase 1 history reaches -- Phase 0c's `curvature-quadratic-
+  invariant` is a QUADRATIC, differently-scoped invariant (its own docstring
+  has the distinction), and Phase 0d stage 2 / Phase 0e's own stage-2
+  investigation each independently declined to implement this exact formula
+  for the same, now-resolved, reason. Reached here only because `riemann-map`
+  removed that specific blocker, not by relaxing this namespace's
+  verification discipline (a Schwarzschild-solution regression test, not a
+  bare assertion, backs this function -- see gtg_test.cljc)."
+  ([h-field x] (curvature-scalar h-field x default-fd-h default-fd-h))
+  ([h-field x fd-h-inner fd-h-outer]
+   (let [h-x (h-field x)
+         R-mat (riemann-map-matrix h-field x fd-h-inner fd-h-outer)]
+     (reduce +
+             (for [a (range 4) b (range 4)]
+               (let [gamma-a (tensor/raise (standard-basis-vector a))
+                     gamma-b (tensor/raise (standard-basis-vector b))
+                     h-b (nth h-x b)
+                     h-a (nth h-x a)
+                     R-hb-ha (tensor/mat-vec R-mat (wedge-vectors h-b h-a))
+                     inner (vector-dot-bivector gamma-b R-hb-ha)]
+                 (tensor/dot gamma-a inner)))))))

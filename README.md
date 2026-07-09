@@ -41,13 +41,17 @@ out of scope here.
 - **`kotoba.sm.gtg`** -- Gauge Theory Gravity (Lasenby-Doran-Gull 1998)
   **rotation-gauge sector (Phase 0a), position-gauge sector (Phase 0b), a
   narrowly-scoped curvature quadratic invariant (Phase 0c), a general-h
-  reciprocal frame (Phase 0d), and a GA-native Minkowski-paired reciprocal
-  frame (Phase 0e) ONLY**. See "Gauge Theory Gravity scope" below before
-  reading or extending this namespace -- it is a narrow, literature-faithful
-  port of two sectors, one deliberately limited curvature invariant, and two
-  dual-basis constructions, not a gravity engine.
+  reciprocal frame (Phase 0d), a GA-native Minkowski-paired reciprocal frame
+  (Phase 0e), and -- new in Phase 1 -- the VACUUM/SPIN-FREE FIELD EQUATION
+  Omega(h), the covariant Riemann map, and the true LDG Ricci scalar ONLY**.
+  See "Gauge Theory Gravity scope" below before reading or extending this
+  namespace -- Phase 0a-0e are a narrow, literature-faithful port of two
+  gauge sectors, one deliberately limited curvature invariant, and two
+  dual-basis constructions; Phase 1 is this namespace's first FIELD EQUATION
+  (as opposed to purely kinematic machinery), scoped to the vacuum/source-free,
+  spin-free closed-form solution only -- not a general-purpose gravity engine.
 
-## Gauge Theory Gravity scope (`kotoba.sm.gtg`, Phase 0a + Phase 0b + Phase 0c + Phase 0d + Phase 0e)
+## Gauge Theory Gravity scope (`kotoba.sm.gtg`, Phase 0a + Phase 0b + Phase 0c + Phase 0d + Phase 0e + Phase 1)
 
 Lasenby-Doran-Gull's 1998 observation is that the restricted Lorentz group
 `SO(1,3)+` can be gauged with the exact same machinery `kotoba.sm.gauge`
@@ -363,32 +367,106 @@ declined stage-2 curvature-scalar investigation) adds:**
     no independent numeric reference value -- one step *earlier* in the
     pipeline (`h -> Omega`, rather than `R -> scalar`). **Per the task's own
     instructions, declining to implement here is the correct outcome, not a
-    failure**: `curvature-scalar` remains unimplemented.
+    failure**: `curvature-scalar` remains unimplemented (AS OF Phase 0e --
+    Phase 1, point 15 below, resolves exactly this blocker).
+
+**Phase 1 (the vacuum/spin-free field equation `Omega(h)`, the covariant
+Riemann map, and the true LDG Ricci scalar -- ADR-2607102300) adds:**
+
+15. **`kotoba.sm.gtg/omega-from-h`: the first FIELD EQUATION this namespace
+    implements.** Everything through Phase 0e built KINEMATIC machinery
+    (gauge potentials, curvature-as-a-functional-of-a-supplied-connection,
+    reciprocal frames) without ever deriving `Omega_mu` from `h_mu` --
+    `omega-from-h` is LDG's own closed-form VACUUM, SPIN-FREE solution of
+    the rotation-gauge field equation, eq (4.53):
+    `omega(a) = -H(a) + (1/2) a.(d_b^H(b))`, with `H(a) = hbar(grad ^
+    hbar^-1(a))` (eq 4.49) and `hbar = kotoba.sm.gtg/frame-adjoint` of `h`
+    (eq 2.46's adjoint relation, the SAME one Phase 0d/0e's reciprocal-frame
+    derivations already use, applied here to the field `h` itself). Takes an
+    `h`-FIELD (`x -> 4x4 matrix`, the SAME shape `derived-metric-field`'s
+    `h-field` argument already uses) and a spacetime point, returns
+    `Omega_mu(x)` in the SAME 4x6 shape `rotation-field-strength` already
+    consumes. The formula was derived from LDG eqs (4.42)/(4.46)/(4.48)/
+    (4.49)/(4.53) and independently cross-derived via a standalone Python/
+    numpy+sympy verification script (not part of this repo) that reproduces
+    LDG's own closed-form Schwarzschild solution (eq 6.73) to ~1e-13
+    *before* any of this namespace's Clojure code was written. The minimal
+    new GA-flavored primitives this required -- `frame-adjoint`,
+    `bivector->matrix`/`matrix->bivector`, `wedge-vectors`,
+    `vector-dot-bivector`, `bivector-commutator`, `H-field` -- are NOT a
+    from-scratch geometric-algebra engine (each is independently numerically
+    cross-checked against the Python reference before being trusted; see
+    `kotoba.sm.gtg`'s PHASE 1 section header comment and each function's own
+    docstring).
+16. **`kotoba.sm.gtg/riemann-basis-pair`/`riemann-map-matrix`/`riemann-map`:
+    the COVARIANT Riemann map, LDG eq (4.48)**:
+    `R(a^b) = L_a omega(b) - L_b omega(a) + omega(a)xomega(b) - omega(c(a,b))`,
+    `c(a,b) = a.omega(b) - b.omega(a)` (eq 4.46), `L_a = a.hbar(grad) =
+    h(a).grad` (eq 4.42) -- **deliberately NOT** Phase 0a's flat `d_mu`:
+    `L_a` differentiates along the position-dependent vector field `h(a)(x)`,
+    a genuinely different connection than `rotation-gauge-field-gradient`'s
+    fixed-coordinate-axis derivative. Reusing Phase 0a's flat-`d_mu`-based
+    machinery here was independently tried and diagnosed as producing an
+    IDENTICALLY ZERO (teleparallel/pure-gauge) curvature for *any* `h` -- a
+    structurally wrong equation, not a sign slip (documented in the
+    standalone verification script this phase's formulas were cross-checked
+    against). `riemann-map`/`riemann-map-matrix` extend `R` to a genuine
+    LINEAR map on the full 6-dimensional bivector space (a linear map is
+    determined by its action on a basis, and `{e_mu^e_nu}` spans the
+    bivector space), so `riemann-map` accepts *any* bivector argument --
+    including one built from position-dependent vectors via `wedge-vectors`
+    (needed by point 17), not only a fixed-frame basis pair.
+17. **`kotoba.sm.gtg/curvature-scalar`: the TRUE Lasenby-Doran-Gull Ricci
+    SCALAR**, `R = sum_{a,b} gamma^a.(gamma^b.R(h_b^h_a))` -- the formula
+    point 12 (Phase 0d stage 2) and point 14 (Phase 0e) each confirmed the
+    STRUCTURE of (two independent primary literature sources agreeing) but
+    declined to implement, because translating `gamma^b.R(h_b^h_a)` into
+    this codebase's array representation needed a bilinear extension of `R`
+    to GENERAL (non-basis-pair) bivectors that did not exist yet. Point 16's
+    `riemann-map` supplies exactly that missing piece, closing the gap with
+    no remaining index/sign ambiguity: `gamma^a` = `tensor/raise` of the
+    FIXED background basis vector `e_a` (trivial under the metric -- both
+    literature sources confirm this, NOT `reciprocal-frame`/
+    `reciprocal-frame-minkowski`, a *different* construction point 12 already
+    found does not belong here); `h_b = h-field(x)[b]`; `R(h_b^h_a)` =
+    `riemann-map` applied to `wedge-vectors(h_b,h_a)`. **Verified**
+    (`gtg_test.cljc`): `0.0`, within finite-difference tolerance, for LDG's
+    own Schwarzschild vacuum solution at two independent test points/mass
+    parameters -- the physically expected result (a vacuum solution has zero
+    Ricci tensor, hence zero Ricci scalar as a direct special case) -- and
+    *exactly* `0.0` (not merely close) at the flat limit. This is the first
+    curvature-SCALAR result this namespace's whole Phase 0a-1 history
+    reaches, arrived at only because point 16 removed the specific,
+    previously-unverifiable index/sign step that blocked Phase 0c/0d/0e in
+    turn -- not by relaxing this namespace's verification discipline.
+
+    **Phase 1 scope note**: `omega-from-h`/`curvature-scalar` implement ONLY
+    the VACUUM (source-free), SPIN-FREE closed-form solution (eq 4.53) --
+    not the general field equation with a matter/torsion source, not the
+    Einstein tensor/multivector, not the GTG action principle, and verified
+    against exactly ONE known exact solution (Schwarzschild), not a general
+    equivalence-to-GR proof.
 
 **Explicitly out of scope, not implemented here** (deliberately, deferred to
-a later phase if ever pursued): the true Lasenby-Doran-Gull curvature scalar
-`R` for **any** `h` (see point 12 above for the Phase 0d investigation and
-exactly which remaining step blocked implementation, point 10 above for how
-Phase 0c's quadratic invariant differs from it even at
-`h = position-gauge-identity`, and point 14 above for Phase 0e's further,
-declined attempt via independent numerical verification and exactly where
-*that* attempt stopped), the Einstein multivector, the GTG action principle
-and field equations, any proof of equivalence to General Relativity, and any
-dark-matter/dark-energy/de-Sitter extension. **Also out of scope**: the FULL
-combined `h_mu` + `Omega_mu` GTG covariant derivative (using `h` to relate
-the rotation-gauge connection to an actual spacetime-vector
-derivative/torsion) -- Phase 0a's covariant derivative (5) and Phase 0b's
-derived metric (8) are developed independently of each other here, not yet
-combined, and Phase 0c's curvature invariant (10) is built from Phase 0a's
-`R_mu-nu` alone, without reference to `h` at all (neither Phase 0d's
-`reciprocal-frame` nor Phase 0e's `reciprocal-frame-minkowski` changes this --
-neither is wired into either, and point 14 above records exactly why Phase 0e
-could not bridge this gap either); that combination is deferred to a later
-phase (Phase 0f or beyond). **This namespace implements the rotation-gauge
-sector's generator algebra/covariant derivative, the position-gauge sector's
-derived metric, one narrowly-scoped curvature quadratic invariant, and two
-general-h dual-basis reciprocal frames (plain-pairing and Minkowski-pairing)
-only** -- it should not be described as "GTG implemented" or as any kind of
+a later phase if ever pursued): the Einstein tensor/multivector `G(a)`, the
+GTG action principle, the general (matter/torsion-sourced) field equation
+(only the vacuum/spin-free closed form (4.53) is implemented, point 15
+above), any proof of equivalence to General Relativity for *general* `h`
+(point 17's `curvature-scalar` is verified against exactly one known exact
+solution, not a general equivalence proof), and any dark-matter/dark-energy/
+de-Sitter extension. **Also out of scope**: a general (non-vacuum) combined
+`h_mu` + `Omega_mu` GTG covariant derivative with torsion -- Phase 0a's
+covariant derivative (5) still stands independently of the vacuum connection
+Phase 1 derives (it was built for a *supplied* `Omega_mu`, not the field-
+equation solution); wiring Phase 1's `omega-from-h` into (5) to get a genuine
+matter-coupled covariant Dirac equation in curved spacetime is a legitimate,
+much larger follow-up, deliberately deferred to a later phase. **This
+namespace implements the rotation-gauge sector's generator algebra/covariant
+derivative, the position-gauge sector's derived metric, one narrowly-scoped
+curvature quadratic invariant, two general-h dual-basis reciprocal frames
+(plain-pairing and Minkowski-pairing), and the VACUUM/SPIN-FREE field
+equation with its covariant Riemann map and Ricci scalar only** -- it should
+not be described as "GTG fully implemented" or as any kind of general-purpose
 gravity engine.
 
 ## Develop
