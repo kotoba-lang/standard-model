@@ -164,6 +164,78 @@
           D-scaled (g/covariant-derivative (c/v-scale coeff d-psi) Ts A-mu gcoup (c/v-scale coeff psi))]
       (is (c/v-approx= D-scaled cD 1e-9)))))
 
+;; ---------------------------------------------------------------------------
+;; regression: self-interaction-term's structure-constant slot order was
+;; fixed from (get-in f-abc [a b cc]) to (get-in f-abc [b cc a]) -- the output
+;; index `a` moved from the FIRST array slot to the THIRD (target) slot, to
+;; match structure-constants' own [T_A,T_B]=if^{ABD}T_D convention (see the
+;; docstrings on `structure-constants` and `self-interaction-term` above).
+;; The tests below prove this is a complete no-op, bit-for-bit, for every
+;; totally-antisymmetric compact-group structure-constant array actually used
+;; in this codebase (U(1)/SU(2)/SU(3)) -- independently re-implementing the
+;; OLD [a b cc] slot order as an oracle and comparing against the fixed
+;; `field-strength`. It DOES matter for so(1,3)'s non-uniform-Gram bivector
+;; generators -- see `kotoba.sm.gtg-test`'s
+;; `rotation-field-strength-self-interaction-now-antisymmetric-*` tests.
+;; ---------------------------------------------------------------------------
+
+(defn- legacy-field-strength-a-b-cc-slot-order
+  "Re-implementation, kept ONLY in this test file, of `field-strength` /
+  `self-interaction-term` exactly as they read BEFORE the index-order fix:
+  the self-interaction term looked up the structure constant as
+  f-abc[a][b][cc] (output index `a` in the FIRST slot) instead of the
+  corrected f-abc[b][cc][a] (output index in the THIRD/target slot). An
+  independent oracle for the regression test below -- NOT itself exercised
+  by any production code path."
+  [f-abc g d-A A]
+  (let [n (count (first A))]
+    (vec
+     (for [mu (range 4)]
+       (vec
+        (for [nu (range 4)]
+          (vec
+           (for [a (range n)]
+             (let [curl (- (get-in d-A [mu nu a]) (get-in d-A [nu mu a]))
+                   A-mu (nth A mu)
+                   A-nu (nth A nu)
+                   self (* g (reduce + (for [b (range n) cc (range n)]
+                                          (* (get-in f-abc [a b cc])
+                                             (nth A-mu b) (nth A-nu cc)))))]
+               (+ curl self))))))))))
+
+(deftest self-interaction-term-slot-order-fix-is-bit-identical-for-su2-and-su3
+  (testing "SU(2): field-strength's corrected f-abc[b][cc][a] slot order gives numerically
+            IDENTICAL results (within floating tolerance) to the OLD f-abc[a][b][cc] slot order,
+            for concrete nonzero d-A and A that genuinely exercise the self-interaction term --
+            because SU(2)'s structure constants (Tr(T^aT^b)=1/2delta^ab, compact/uniform Gram) are
+            totally antisymmetric under ANY permutation of their three indices, so which slot holds
+            the output index `a` cannot change the numeric result"
+    (let [f (g/structure-constants g/su2-generators)
+          zero3 (vec (repeat 3 0.0))
+          d-A (-> (vec (repeat 4 (vec (repeat 4 zero3))))
+                  (assoc-in [0 1] [1.0 0.5 -0.3])
+                  (assoc-in [1 0] [0.2 -0.4 0.1])
+                  (assoc-in [2 3] [0.7 0.0 0.9])
+                  (assoc-in [3 2] [-0.6 0.3 0.2]))
+          A [[0.3 0.1 -0.2] [0.5 0.4 0.0] [0.0 0.6 -0.1] [0.2 0.2 0.2]]
+          F-new (g/field-strength f 1.0 d-A A)
+          F-old (legacy-field-strength-a-b-cc-slot-order f 1.0 d-A A)]
+      (doseq [mu (range 4) nu (range 4) a (range 3)]
+        (is (close? (get-in F-new [mu nu a]) (get-in F-old [mu nu a]))
+            (str "F[" mu "][" nu "][" a "] new vs legacy slot order")))))
+  (testing "SU(3): same bit-for-bit equivalence for the 8 Gell-Mann/2 generators"
+    (let [f (g/structure-constants g/su3-generators)
+          zero8 (vec (repeat 8 0.0))
+          d-A (-> (vec (repeat 4 (vec (repeat 4 zero8))))
+                  (assoc-in [0 1] (assoc zero8 0 1.0 3 0.5))
+                  (assoc-in [1 0] (assoc zero8 0 0.2 4 -0.4)))
+          A (vec (repeat 4 (assoc zero8 0 0.3 3 0.7 5 -0.2)))
+          F-new (g/field-strength f 1.0 d-A A)
+          F-old (legacy-field-strength-a-b-cc-slot-order f 1.0 d-A A)]
+      (doseq [mu (range 4) nu (range 4) a (range 8)]
+        (is (close? (get-in F-new [mu nu a]) (get-in F-old [mu nu a]))
+            (str "F[" mu "][" nu "][" a "] new vs legacy slot order"))))))
+
 (deftest field-strength-antisymmetric-under-mu-nu-swap
   (testing "SU(2): F_mu-nu^a = -F_nu-mu^a for concrete, non-random NONZERO d-A (curl term) AND
             NONZERO A (so the self-interaction term g f^abc A_mu^b A_nu^c is also genuinely

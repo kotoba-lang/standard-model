@@ -108,6 +108,22 @@ new code that exercises it):**
    The pure curl term `d_mu Omega_nu - d_nu Omega_mu` carries no
    normalization caveat (it does not involve structure constants at all); the
    self-interaction term uses the now-fixed `structure-constants` from point 3.
+   A second, independent bug was later found (and fixed) in
+   `kotoba.sm.gauge/self-interaction-term` itself: it indexed the
+   structure-constant array with the output/free generator index in the
+   wrong array slot -- numerically invisible for the compact `U(1)`/`SU(2)`/
+   `SU(3)` groups (whose structure constants are totally antisymmetric under
+   any index permutation), but it broke the physically required
+   `R_mu-nu = -R_nu-mu` antisymmetry for this `so(1,3)` generator set
+   whenever the self-interaction term's two excited `Omega` components
+   mixed a boost-type and a rotation-type index (this generator set's
+   trace-Gram matrix is diagonal but **not** uniform, +1 for rotation-type
+   vs -1 for boost-type -- see point 3). **This has since been fixed**
+   (`kotoba.sm.gauge/self-interaction-term`'s docstring has the derivation);
+   `R_mu-nu` is now antisymmetric for every excitation pattern, including
+   mixed boost/rotation ones -- see `gtg_test.cljc`'s
+   `rotation-field-strength-self-interaction-now-antisymmetric-*` tests for
+   the before/after numeric record.
 5. the spin-connection covariant derivative on a Dirac spinor,
    `D_mu psi = d_mu psi - i g Omega_mu^k T_k psi`, via
    `kotoba.sm.gauge/covariant-derivative` applied to this generator set
