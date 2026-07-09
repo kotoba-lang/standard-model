@@ -473,3 +473,84 @@
         (is (close? (gtg/curvature-quadratic-invariant R) 10.0)))
       (testing "and it is genuinely nonzero, not just close-to-zero-within-tolerance"
         (is (> (Math/abs (double (gtg/curvature-quadratic-invariant R))) 1.0))))))
+
+;; ---------------------------------------------------------------------------
+;; 11. Phase 0d -- reciprocal (dual) frame h-bar^mu for a GENERAL invertible
+;;     position-gauge field h (not just position-gauge-identity/a constant
+;;     Lorentz matrix). See gtg.cljc's namespace docstring (item 11) and
+;;     `reciprocal-frame`'s own docstring for the exact biorthogonality
+;;     relation being checked here (PLAIN component pairing, not the
+;;     Minkowski-metric `tensor/dot`) and the honesty note on why this is a
+;;     standard dual-basis construction, not asserted to be a literature-
+;;     exact port of the LDG reciprocal frame for a general h.
+;; ---------------------------------------------------------------------------
+
+(defn- component-pairing
+  "The plain component (Kronecker) pairing sum_a v[a] w[a] -- NOT
+  kotoba.sm.tensor/dot's Minkowski-metric pairing -- used to check
+  reciprocal-frame's biorthogonality relation h-bar^mu . h_nu = delta^mu_nu,
+  since that relation is defined with THIS pairing, not tensor/dot (see
+  reciprocal-frame's HONESTY NOTE)."
+  [v w]
+  (reduce + (map * v w)))
+
+(def ^:private a-non-identity-invertible-h
+  "A concrete 4x4 real matrix that is invertible (checked below) but is
+  neither position-gauge-identity nor a constant Lorentz transformation
+  (`vf/lorentz?` is false for it, same sanity pattern
+  derived-metric-is-symmetric-for-a-general-non-identity-h already uses) --
+  exercises reciprocal-frame's fully general (not h=identity, not h=Lorentz)
+  code path."
+  [[2.0 0.0 0.0 1.0]
+   [0.0 1.0 0.0 0.0]
+   [1.0 2.0 1.0 0.0]
+   [0.0 0.0 0.0 3.0]])
+
+(deftest reciprocal-frame-h-inverse-round-trips-for-a-general-invertible-h
+  (testing "(a) for a-non-identity-invertible-h, kotoba.sm.tensor/mat-inverse genuinely
+            satisfies h * h^-1 = h^-1 * h = the 4x4 identity -- the load-bearing linear-
+            algebra fact reciprocal-frame is built on top of"
+    (let [h a-non-identity-invertible-h
+          hinv (tensor/mat-inverse h)]
+      (is (not (vf/lorentz? h)) "sanity: h is not itself a Lorentz transformation")
+      (doseq [i (range 4) j (range 4)]
+        (is (close? (get-in (tensor/mat-mat h hinv) [i j]) (if (= i j) 1.0 0.0))
+            (str "(h.h^-1)[" i "][" j "]"))
+        (is (close? (get-in (tensor/mat-mat hinv h) [i j]) (if (= i j) 1.0 0.0))
+            (str "(h^-1.h)[" i "][" j "]"))))))
+
+(deftest reciprocal-frame-satisfies-biorthogonality-for-a-general-invertible-h
+  (testing "(b) h-bar^mu . h_nu = delta^mu_nu (PLAIN component pairing, see
+            component-pairing above) holds for EVERY (mu,nu) pair, for
+            a-non-identity-invertible-h -- the defining relation of the reciprocal frame"
+    (let [h a-non-identity-invertible-h
+          hbar (gtg/reciprocal-frame h)]
+      (doseq [mu (range 4) nu (range 4)]
+        (is (close? (component-pairing (nth hbar mu) (nth h nu)) (if (= mu nu) 1.0 0.0))
+            (str "h-bar^" mu " . h_" nu))))))
+
+(deftest reciprocal-frame-reduces-to-h-at-position-gauge-identity
+  (testing "(c) at h = position-gauge-identity, h-bar = h EXACTLY (bit-for-bit, not
+            merely close) -- the identity matrix is its own inverse and its own
+            transpose, so Hbar = (I^-1)^T = I^T = I = H"
+    (is (= (gtg/reciprocal-frame gtg/position-gauge-identity) gtg/position-gauge-identity))
+    (testing "and it still satisfies the biorthogonality relation there, consistent with
+              (b) above (a degenerate but non-vacuous check of the general case)"
+      (doseq [mu (range 4) nu (range 4)]
+        (is (close? (component-pairing (nth gtg/position-gauge-identity mu)
+                                        (nth gtg/position-gauge-identity nu))
+                     (if (= mu nu) 1.0 0.0))
+            (str "h-bar^" mu " . h_" nu " at h=position-gauge-identity"))))))
+
+(deftest reciprocal-frame-throws-on-a-singular-h
+  (testing "(d) a non-invertible (determinant ~0) h throws ex-info -- propagated from
+            kotoba.sm.tensor/mat-inverse -- rather than silently returning a garbage
+            matrix; h's invertibility is a genuine precondition (item 7's docstring),
+            not merely assumed away"
+    (let [singular-h [[1.0 2.0 3.0 4.0]
+                       [1.0 2.0 3.0 4.0]
+                       [0.0 1.0 0.0 0.0]
+                       [0.0 0.0 1.0 0.0]]]
+      (is (close? (tensor/mat-det singular-h) 0.0) "sanity: this h genuinely is singular")
+      (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
+                    (gtg/reciprocal-frame singular-h))))))

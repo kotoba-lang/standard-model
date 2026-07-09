@@ -1,10 +1,10 @@
 (ns kotoba.sm.gtg
   "Gauge Theory Gravity (Lasenby-Doran-Gull 1998, 'Gravity, gauge theories and
   geometric algebra') -- ROTATION-GAUGE SECTOR (Phase 0a), POSITION-GAUGE
-  SECTOR (Phase 0b), AND A NARROWLY-SCOPED CURVATURE QUADRATIC INVARIANT
+  SECTOR (Phase 0b), A NARROWLY-SCOPED CURVATURE QUADRATIC INVARIANT
   (Phase 0c, h = position-gauge-identity ONLY -- NOT the LDG curvature
-  scalar) ONLY. See the 'Scope' section of the repo README for the ADR
-  reference.
+  scalar), AND A GENERAL-h RECIPROCAL FRAME (Phase 0d) ONLY. See the 'Scope'
+  section of the repo README for the ADR reference.
 
   GTG's central observation (well known in the literature, not a new result
   of this namespace) is that the restricted Lorentz group SO(1,3)+ can be
@@ -84,12 +84,17 @@
        the physical four-vector h_mu, in the same [t x y z] component
        convention `kotoba.sm.tensor`/`kotoba.sm.vector-field` use everywhere
        else). `position-gauge-identity` is the trivial choice h_mu^nu =
-       delta_mu^nu ('gauge coordinates = physical coordinates'). Unlike the
-       rotation-gauge sector's Omega_mu, this namespace does NOT implement a
-       general matrix inverse/determinant to check h's invertibility
-       numerically (the same deliberate omission `kotoba.sm.gauge` already
-       documents for its own structure-constant derivation) -- invertibility
-       is a precondition on `h`, not something computed here.
+       delta_mu^nu ('gauge coordinates = physical coordinates'). AT PHASE 0b
+       TIME this namespace did not implement a general matrix inverse to
+       check h's invertibility numerically or to build a reciprocal frame for
+       general h (the same deliberate omission `kotoba.sm.gauge` documents
+       for its own structure-constant derivation) -- invertibility was a
+       precondition on `h`, not something computed. PHASE 0d (item 11 below)
+       adds a general NxN matrix inverse (`kotoba.sm.tensor/mat-inverse`) and
+       uses it to build a reciprocal frame `reciprocal-frame` for ANY
+       invertible h, not just `position-gauge-identity` -- invertibility is
+       now CHECKED (throws `ex-info` on a ~0 determinant) rather than merely
+       assumed.
     8. the derived metric g_mu-nu(x) = h_mu(x) . h_nu(x) = eta_ab h_mu^a(x)
        h_nu^b(x) (`derived-metric`, `derived-metric-field`), computed by
        treating each row of `h` as an upper-index four-vector and reusing
@@ -166,24 +171,75 @@
        `compact-group-trace-normalization-holds?`'s finding, of this
        generator set's noncompactness.
 
-  EXPLICITLY OUT OF SCOPE, NOT IMPLEMENTED HERE (Phase 0a+0b+0c): the true
+  PHASE 0d (general-position-gauge reciprocal frame, DELIBERATELY STAGED --
+  see the README's Phase 0d section for the two-stage split) adds:
+    11. a GENERAL NxN matrix inverse (`kotoba.sm.tensor/mat-det`,
+       `mat-minor`, `mat-adjugate`, `mat-inverse` -- ordinary Laplace-
+       expansion/adjugate linear algebra, no physics convention involved,
+       throws `ex-info` on a ~0 determinant rather than dividing by it, same
+       spirit as `kotoba.sm.gauge/diagonal-gram-real`'s guard) and
+       `reciprocal-frame`: the GTG reciprocal (dual) frame h-bar^mu of a
+       GENERAL invertible position-gauge-field VALUE h (not just
+       `position-gauge-identity` or a constant Lorentz matrix, Phase 0b's
+       scope), defined by the STANDARD linear-algebra dual-basis
+       biorthogonality relation h-bar^mu . h_nu = delta^mu_nu, where '.' here
+       is the PLAIN component (Kronecker) pairing sum_a h-bar^mu[a] h_nu[a]
+       -- NOT `kotoba.sm.tensor/dot`'s Minkowski-metric pairing. Given this
+       pairing, biorthogonality is a matrix equation Hbar . H^T = I, so
+       Hbar = (H^-1)^T -- `reciprocal-frame` computes exactly this, via
+       `mat-inverse` then `kotoba.sm.tensor/mat-transpose`; gtg_test.cljc
+       checks the biorthogonality relation holds numerically for a concrete
+       non-identity invertible h, that h*h^-1=I for that same h, that a
+       singular (determinant-0) h throws `ex-info`, and that at
+       h = `position-gauge-identity`, h-bar = h EXACTLY (the identity matrix
+       is its own inverse and its own transpose).
+
+       *** HONESTY NOTE ***: this is the ORDINARY linear-algebra dual basis
+       of the ROWS of h, treating them as an abstract basis of R^4 under the
+       PLAIN component pairing -- it is deliberately NOT asserted to be an
+       ingredient of the Lasenby-Doran-Gull curvature scalar. A literature
+       follow-up (stage 2 of this phase, see `reciprocal-frame`'s own
+       docstring and the README's Phase 0d section for the full writeup and
+       both source URLs) found TWO independent, mutually-corroborating
+       primary sources (Lasenby/Doran/Gull 1998/2004, arXiv gr-qc/0405033;
+       Lewis/Doran/Lasenby 1999, arXiv gr-qc/9910039) pinning down the
+       ACTUAL Ricci-scalar formula's high-level structure -- and it turns
+       out that formula's outer contraction uses the FIXED BACKGROUND
+       frame's OWN reciprocal (trivial under the metric, no matrix inverse
+       of h needed at all), NOT `reciprocal-frame` (a reciprocal frame OF h)
+       as originally guessed. So `reciprocal-frame` is confirmed NOT to be
+       what R needs, rather than left merely unconfirmed either way. R
+       itself remains unimplemented because a DIFFERENT step -- translating
+       the confirmed formula's 'vector . bivector' Clifford-algebra
+       contraction into this codebase's six-generator-component array
+       representation -- has its own unresolved index/sign risk that this
+       pass could not independently verify (see `reciprocal-frame`'s
+       docstring for the details). `reciprocal-frame` remains useful in its
+       own right as h's standard dual basis (e.g. for a future combined
+       covariant derivative, still out of scope), just not as a confirmed
+       LDG-R ingredient.
+
+  EXPLICITLY OUT OF SCOPE, NOT IMPLEMENTED HERE (Phase 0a+0b+0c+0d): the true
   Lasenby-Doran-Gull curvature scalar R (see item 10's note for exactly how
-  Phase 0c's quadratic invariant differs from it, and why), for ANY h (a
-  general 4x4 matrix inverse / reciprocal frame h-bar is not implemented
-  anywhere in this codebase); the Einstein multivector, the GTG action
-  principle and field equations, any proof of equivalence to General
-  Relativity, and any dark-matter/dark-energy/de-Sitter extension. ALSO OUT OF
-  SCOPE: the FULL combined h_mu+Omega_mu GTG covariant derivative (i.e. using
-  h to relate the rotation-gauge connection to an actual spacetime-vector
-  derivative/torsion) -- this namespace's Phase-0a covariant derivative (5)
-  and Phase-0b derived metric (8) are developed independently of each other,
-  not yet combined, and Phase 0c's curvature invariant (10) is built from
-  Phase 0a's R_mu-nu alone, without reference to h at all. Those are
+  Phase 0c's quadratic invariant differs from it, and item 11's honesty note
+  for the Phase 0d literature investigation's findings and exactly which
+  remaining step blocked implementation);
+  the Einstein multivector, the GTG action principle and field equations, any
+  proof of equivalence to General Relativity, and any dark-matter/dark-
+  energy/de-Sitter extension. ALSO OUT OF SCOPE: the FULL combined
+  h_mu+Omega_mu GTG covariant derivative (i.e. using h to relate the
+  rotation-gauge connection to an actual spacetime-vector derivative/torsion)
+  -- this namespace's Phase-0a covariant derivative (5) and Phase-0b derived
+  metric (8) are developed independently of each other, not yet combined, and
+  Phase 0c's curvature invariant (10) is built from Phase 0a's R_mu-nu alone,
+  without reference to h at all (Phase 0d's `reciprocal-frame` does not
+  change this -- it is not yet wired into either (5) or (10)). Those are
   legitimate, much larger follow-up efforts, deliberately deferred to a later
-  phase (Phase 0d or beyond) -- this namespace is a limited,
-  literature-faithful port of the rotation-gauge and position-gauge SECTORS
-  plus one narrowly-scoped curvature invariant ONLY, and must not be read as
-  'GTG is implemented here' or as any kind of gravity engine."
+  phase (Phase 0e or beyond) -- this namespace is a limited,
+  literature-faithful port of the rotation-gauge and position-gauge SECTORS,
+  one narrowly-scoped curvature invariant, and a general-h dual-basis
+  reciprocal frame ONLY, and must not be read as 'GTG is implemented here' or
+  as any kind of gravity engine."
   (:require [kotoba.sm.complex :as c]
             [kotoba.sm.tensor :as tensor]
             [kotoba.sm.spinor :as spinor]
@@ -630,3 +686,129 @@
               (let [Rk (curvature-bivector-component R k)
                     Rk-lower (tensor/lower2 Rk)]
                 (* (get-in K [k k]) (tensor/full-contract Rk Rk-lower)))))))
+
+;; ---------------------------------------------------------------------------
+;; 11. Phase 0d -- reciprocal (dual) frame h-bar^mu for a GENERAL invertible
+;;    position-gauge field h, via `kotoba.sm.tensor/mat-inverse` (a general
+;;    NxN matrix inverse, ordinary linear algebra, no physics convention).
+;;    See the namespace docstring's Phase-0d SCOPE note (item 11) for the
+;;    full derivation and, crucially, for the honesty note on why this is a
+;;    standard dual-basis construction and NOT asserted to be a literature-
+;;    exact port of the Lasenby-Doran-Gull geometric-algebra reciprocal frame
+;;    for a general h.
+;; ---------------------------------------------------------------------------
+
+(defn reciprocal-frame
+  "The reciprocal (dual) frame h-bar^mu of a GENERAL invertible position-gauge
+  field VALUE `h` (a 4x4 real matrix, row `mu` = the physical four-vector
+  h_mu -- same layout as `position-gauge-identity`/`derived-metric`, see item
+  7's docstring), defined by the STANDARD linear-algebra dual-basis
+  biorthogonality relation
+
+    h-bar^mu . h_nu = delta^mu_nu
+
+  where '.' here is the PLAIN component (Kronecker) pairing
+  sum_a h-bar^mu[a] h_nu[a] -- the ordinary dual-basis construction for ANY
+  basis {h_mu} of R^4, independent of any metric and independent of any
+  GTG-paper-specific convention (see this function's HONESTY NOTE below for
+  exactly how this differs from, and is NOT verified against, the
+  Lasenby-Doran-Gull geometric-algebra reciprocal frame, which uses the
+  Minkowski-metric pairing `kotoba.sm.tensor/dot` instead of this plain
+  component pairing).
+
+  DERIVATION: write `h` as a 4x4 matrix H (row `mu` = h_mu) and the sought
+  reciprocal frame as a 4x4 matrix Hbar (row `mu` = h-bar^mu). The
+  biorthogonality condition, component by component, is
+  sum_a Hbar[mu][a] * H[nu][a] = delta[mu][nu]; the left side is exactly
+  (Hbar . H^T)[mu][nu] (ordinary matrix product), so the condition is the
+  matrix equation Hbar . H^T = I, i.e. Hbar = (H^T)^-1 = (H^-1)^T. This
+  function computes exactly that: `kotoba.sm.tensor/mat-inverse` (throws if
+  `h` is singular) then `kotoba.sm.tensor/mat-transpose`.
+
+  VERIFICATION (gtg_test.cljc): (a) for a concrete invertible, non-identity
+  4x4 matrix, `kotoba.sm.tensor/mat-inverse` genuinely satisfies
+  h * h^-1 = h^-1 * h = the 4x4 identity. (b) the biorthogonality relation
+  h-bar^mu . h_nu = delta^mu_nu (plain component pairing) holds numerically
+  for that same non-identity h. (c) at h = `position-gauge-identity`,
+  h-bar = h EXACTLY (the identity matrix is its own inverse and its own
+  transpose, so Hbar = (I^-1)^T = I^T = I = H -- bit-for-bit, not merely
+  close). (d) a singular (determinant ~0) h throws `ex-info` (propagated
+  from `mat-inverse`) rather than silently dividing by ~0 or returning a
+  garbage matrix.
+
+  HONESTY NOTE, READ BEFORE USING THIS AS 'the LDG reciprocal frame' for a
+  general h: *** this function's biorthogonality pairing is the PLAIN
+  component/Kronecker pairing, NOT the Minkowski-metric GA scalar product
+  `kotoba.sm.tensor/dot` that a GA-native reciprocal frame would generally be
+  defined with. *** Working the Minkowski-pairing version through the same
+  derivation: sum_a eta[a][a] Hbar[mu][a] H[nu][a] = delta[mu][nu] is the
+  matrix equation Hbar . eta . H^T = I, giving Hbar_eta = (H^-1)^T . eta (eta
+  is its own inverse in this basis) -- a DIFFERENT matrix from this
+  function's Hbar in general, and in particular at h =
+  `position-gauge-identity` it gives Hbar_eta = eta = diag(1,-1,-1,-1), i.e.
+  h-bar^0 = h_0 but h-bar^i = -h_i for the 3 spatial rows -- NOT h-bar = h.
+
+  *** FOLLOW-UP LITERATURE CHECK (Phase 0d, stage 2 investigation): this
+  function's h-of-h reciprocal frame turns out NOT to be what the actual
+  Lasenby-Doran-Gull curvature scalar needs at all. *** Reading the primary
+  source directly (Lasenby, Doran & Gull, 'Gravity, Gauge Theories and
+  Geometric Algebra', Phil. Trans. R. Soc. Lond. A (1998) 356 487-582,
+  updated arXiv version gr-qc/0405033, section 4 'The field equations',
+  eqns 4.9, 4.11, 4.12) and a second, independent, mutually-corroborating
+  source by two of the same three authors (Lewis, Doran & Lasenby,
+  'Quadratic Lagrangians and Topology in Gauge Theory Gravity',
+  arXiv gr-qc/9910039, section 2, eqns 5, 6, 12, 14), the Ricci SCALAR is:
+
+    R = sum_{a,b} gamma^a . (gamma^b . R(h_b ^ h_a))
+
+  where h_b = h(gamma_b) (source 1's h_mu, EXACTLY this namespace's Phase 0b
+  `h`/`position-gauge-identity` convention -- gr-qc/0405033 eq 3.35's
+  g_mu = h^-1(e_mu) is a DIFFERENT, h^-1-built quantity, not this one),
+  gamma^a is the reciprocal of the FIXED BACKGROUND orthonormal frame
+  gamma_a (TRIVIAL under the Minkowski metric -- gamma^0=gamma_0,
+  gamma^i=-gamma_i, i.e. `kotoba.sm.tensor/raise` applied to the ordinary
+  basis vectors, NOT a reciprocal frame of h at all), and R(x^y) is the
+  BILINEAR extension of Phase 0a's `rotation-field-strength` to an arbitrary
+  bivector argument (justified rigorously, not guessed: R_ab is DEFINED as
+  D_a Omega_b - D_b Omega_a + Omega_a x Omega_b, manifestly bilinear in a,b
+  since Omega(a) is itself linear in a by construction -- so
+  R(h_b^h_a) = sum_{rho,sigma} h[b][rho] h[a][sigma] R[rho][sigma] follows
+  from `rotation-field-strength`'s own defining bilinearity, needing no new
+  literature confirmation).
+
+  Both sources independently agree on this formula's STRUCTURE, and in
+  particular BOTH show the outer contraction uses the FIXED frame's OWN
+  reciprocal (gamma^a, no inverse of h needed), NOT `reciprocal-frame`
+  (h-bar of h) as originally guessed when this function was written -- a
+  genuine, literature-grounded correction to that initial assumption.
+  HOWEVER, translating 'gamma^b . R(h_b^h_a)' (a vector . bivector -> vector
+  Clifford-algebra contraction) into this codebase's R[mu][nu][k]
+  six-generator-component array representation (rather than a native GA
+  multivector) requires an ADDITIONAL, nontrivial contraction step -- which
+  of R's spacetime-index/generator-index slots the contracting vector's
+  index pairs with, and with what sign/factor -- that NEITHER source spells
+  out in a form directly transcribable to this array representation, and
+  that this pass could not independently re-derive with confidence within a
+  bounded research effort (a hand re-derivation via the standard GA identity
+  v.(a^b)=(v.a)b-(v.b)a produced a candidate formula but with unresolved
+  factor-of-2/sign risk once expressed over the SIX generator components
+  rather than a full antisymmetric rank-2 slice, and no independent
+  numeric-example reference value was found to test a candidate against).
+  This is exactly the class of error this codebase's own established
+  practice already treats as too risky to guess at without independent
+  verification -- see `kotoba.sm.gauge/self-interaction-term`'s
+  since-fixed slot-order bug (gtg.cljc's rotation-field-strength docstring)
+  and `curvature-quadratic-invariant`'s own honesty note (item 10) for two
+  prior instances of the SAME 'which index pairs with which' risk in this
+  exact curvature-scalar problem. `curvature-scalar` is therefore
+  DELIBERATELY NOT implemented in this namespace -- see the README's Phase
+  0d section for the fuller writeup of this investigation, including both
+  source URLs. `reciprocal-frame` is offered only as a standard,
+  independently-correct dual-basis construction of h's own reciprocal frame
+  (useful in its own right, e.g. for a future combined covariant derivative,
+  still out of scope -- see the namespace docstring's out-of-scope list),
+  not asserted to be an ingredient of the LDG curvature scalar for a general
+  h."
+  ([h] (reciprocal-frame h 1e-9))
+  ([h eps]
+   (tensor/mat-transpose (tensor/mat-inverse h eps))))

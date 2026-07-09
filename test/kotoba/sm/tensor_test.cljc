@@ -39,3 +39,59 @@
     (is (= (t/levi-civita4 0 0 1 2) 0)))
   (testing "a 4-cycle (0123)->(1230) is an odd permutation, gives -1"
     (is (= (t/levi-civita4 1 2 3 0) -1))))
+
+;; ---------------------------------------------------------------------------
+;; general square-matrix determinant/inverse -- ordinary linear algebra
+;; (Laplace-expansion determinant, adjugate/determinant inverse formula), used
+;; by kotoba.sm.gtg/reciprocal-frame (Phase 0d) to invert a general position
+;; gauge field h. Exercised here directly, independently of gtg.cljc.
+;; ---------------------------------------------------------------------------
+
+(deftest determinant
+  (testing "2x2, the textbook ad-bc formula"
+    (is (close? (t/mat-det [[1 2] [3 4]]) -2.0)))
+  (testing "3x3 diagonal matrix: determinant is the product of the diagonal entries"
+    (is (close? (t/mat-det [[2 0 0] [0 3 0] [0 0 4]]) 24.0)))
+  (testing "4x4 identity has determinant 1"
+    (is (close? (t/mat-det [[1 0 0 0] [0 1 0 0] [0 0 1 0] [0 0 0 1]]) 1.0)))
+  (testing "4x4 diagonal matrix: determinant is the product of the diagonal entries,
+            including a sign flip from the negative entry"
+    (is (close? (t/mat-det [[2 0 0 0] [0 -3 0 0] [0 0 5 0] [0 0 0 7]]) (* 2 -3.0 5 7))))
+  (testing "a singular 4x4 matrix (two identical rows) has determinant exactly 0 --
+            a standard determinant property (duplicate rows => 0), not merely close"
+    (is (= (t/mat-det [[1 2 3 4] [1 2 3 4] [0 1 0 0] [0 0 1 0]]) 0))))
+
+(deftest matrix-inverse-round-trips-for-invertible-matrices
+  (testing "2x2 inverse via the textbook 1/det*[[d,-b],[-c,a]] formula: m*m^-1 = m^-1*m = I"
+    (let [m [[1.0 2.0] [3.0 4.0]]
+          minv (t/mat-inverse m)]
+      (doseq [i (range 2) j (range 2)]
+        (is (close? (get-in (t/mat-mat m minv) [i j]) (if (= i j) 1.0 0.0))
+            (str "(m.minv)[" i "][" j "]"))
+        (is (close? (get-in (t/mat-mat minv m) [i j]) (if (= i j) 1.0 0.0))
+            (str "(minv.m)[" i "][" j "]")))))
+  (testing "4x4 identity's inverse is EXACTLY (bit-for-bit, integer arithmetic) the identity"
+    (let [id [[1 0 0 0] [0 1 0 0] [0 0 1 0] [0 0 0 1]]]
+      (is (= (t/mat-inverse id) id))))
+  (testing "a concrete invertible, non-identity 4x4 matrix (not diagonal, not triangular,
+            not orthogonal): m*m^-1 = m^-1*m = the 4x4 identity, component by component"
+    (let [m [[2.0 0.0 0.0 1.0]
+             [0.0 1.0 0.0 0.0]
+             [1.0 2.0 1.0 0.0]
+             [0.0 0.0 0.0 3.0]]
+          minv (t/mat-inverse m)]
+      (doseq [i (range 4) j (range 4)]
+        (is (close? (get-in (t/mat-mat m minv) [i j]) (if (= i j) 1.0 0.0))
+            (str "(m.minv)[" i "][" j "]"))
+        (is (close? (get-in (t/mat-mat minv m) [i j]) (if (= i j) 1.0 0.0))
+            (str "(minv.m)[" i "][" j "]"))))))
+
+(deftest matrix-inverse-throws-on-a-singular-matrix
+  (testing "a singular (determinant ~0) 4x4 matrix throws ex-info rather than
+            silently dividing by ~0 or returning a garbage matrix -- same
+            'throw rather than divide by ~0' spirit as
+            kotoba.sm.gauge/diagonal-gram-real's guard on a ~0 Gram diagonal"
+    (let [singular [[1 2 3 4] [1 2 3 4] [0 1 0 0] [0 0 1 0]]]
+      (is (close? (t/mat-det singular) 0.0) "sanity: this matrix genuinely is singular")
+      (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
+                    (t/mat-inverse singular))))))
