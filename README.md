@@ -39,11 +39,12 @@ out of scope here.
   `SU(3)_c x SU(2)_L x U(1)_Y` covariant derivative, and Lagrangian-density
   term assembly (Yang-Mills + Dirac + Higgs + Yukawa).
 - **`kotoba.sm.gtg`** -- Gauge Theory Gravity (Lasenby-Doran-Gull 1998)
-  **rotation-gauge sector ONLY, Phase 0a**. See "Gauge Theory Gravity scope"
-  below before reading or extending this namespace -- it is a narrow,
-  literature-faithful port of one sector, not a gravity engine.
+  **rotation-gauge sector (Phase 0a) and position-gauge sector (Phase 0b)
+  ONLY**. See "Gauge Theory Gravity scope" below before reading or extending
+  this namespace -- it is a narrow, literature-faithful port of two sectors,
+  not a gravity engine.
 
-## Gauge Theory Gravity scope (`kotoba.sm.gtg`, Phase 0a)
+## Gauge Theory Gravity scope (`kotoba.sm.gtg`, Phase 0a + Phase 0b)
 
 Lasenby-Doran-Gull's 1998 observation is that the restricted Lorentz group
 `SO(1,3)+` can be gauged with the exact same machinery `kotoba.sm.gauge`
@@ -115,15 +116,53 @@ new code that exercises it):**
    Dirac-equation residual, verified numerically identical (not merely
    close), not just structurally argued.
 
+**Phase 0b (position-gauge sector) adds:**
+
+7. the position gauge field `h_mu(x)`: at each spacetime point, an
+   invertible linear map from gauge coordinates to physical spacetime,
+   represented as a 4x4 real matrix `h[mu][nu]` = `h_mu^nu` (row `mu` IS the
+   physical four-vector `h_mu`, in the same `[t x y z]` component convention
+   `kotoba.sm.tensor`/`kotoba.sm.vector-field` use everywhere else).
+   `kotoba.sm.gtg/position-gauge-identity` is the trivial choice
+   `h_mu^nu = delta_mu^nu` ("gauge coordinates = physical coordinates"). As
+   with `kotoba.sm.gauge`'s own documented omission of a general matrix
+   inverse, this namespace does not implement a determinant/invertibility
+   check for `h` -- invertibility is a precondition on `h`, not something
+   computed here.
+8. the derived metric `g_mu-nu(x) = h_mu(x) . h_nu(x) = eta_ab h_mu^a(x)
+   h_nu^b(x)` (`kotoba.sm.gtg/derived-metric`, `derived-metric-field`),
+   computed by treating each row of `h` as an upper-index four-vector and
+   reusing `kotoba.sm.tensor/dot` (the existing Minkowski inner product) row
+   by row -- no new inner-product machinery. **Verified EXACTLY** (bit-for-bit
+   integer arithmetic, not merely close within a tolerance) to reduce to
+   `kotoba.sm.tensor/metric` at `h = position-gauge-identity`
+   (`gtg_test.cljc`'s `flat-limit-h-reproduces-minkowski-metric-exactly`).
+9. a consistency check that `kotoba.sm.vector-field`'s pre-existing global
+   `SO(3,1)+` representation (`boost`/`rotation-x`/`rotation-y`/`rotation-z`)
+   is contained in this sector as the special case "`h_mu` = a constant
+   Lorentz matrix, `Omega_mu = 0`": a constant `h` built from any Lorentz
+   transformation reproduces the flat metric exactly (up to floating-point
+   roundoff from `sqrt`/`cos`/`sin`), because `Lambda^T eta Lambda = eta`
+   (`vector-field/lorentz?`'s defining property) algebraically implies
+   `Lambda eta Lambda^T = eta`, which is exactly what `derived-metric`
+   computes row-by-row for `h = Lambda` (derivation in `gtg.cljc`'s Phase-0b
+   section-7 header comment; numeric check in `gtg_test.cljc`'s
+   `global-lorentz-transformations-are-the-constant-flat-special-case`, for
+   several concrete boosts and rotations).
+
 **Explicitly out of scope, not implemented here** (deliberately, deferred to
-a later phase if ever pursued): the position gauge field `h_mu`, the derived
-spacetime metric `g_mu-nu = h_mu . h_nu`, the Riemann/Ricci curvature scalars
-built from `R_mu-nu`, the Einstein multivector, the GTG action principle and
-field equations, any proof of equivalence to General Relativity, and any
-dark-matter/dark-energy/de-Sitter extension. **This namespace implements the
-rotation-gauge sector's generator algebra and covariant derivative only** --
-it should not be described as "GTG implemented" or as any kind of gravity
-engine.
+a later phase if ever pursued): the Riemann/Ricci curvature scalars built
+from `R_mu-nu`, the Einstein multivector, the GTG action principle and field
+equations, any proof of equivalence to General Relativity, and any
+dark-matter/dark-energy/de-Sitter extension. **Also out of scope**: the FULL
+combined `h_mu` + `Omega_mu` GTG covariant derivative (using `h` to relate the
+rotation-gauge connection to an actual spacetime-vector derivative/torsion)
+-- Phase 0a's covariant derivative (5) and Phase 0b's derived metric (8) are
+developed independently of each other here, not yet combined; that
+combination is deferred to a later phase (Phase 0c or beyond). **This
+namespace implements the rotation-gauge sector's generator algebra/covariant
+derivative and the position-gauge sector's derived metric only** -- it should
+not be described as "GTG implemented" or as any kind of gravity engine.
 
 ## Develop
 
