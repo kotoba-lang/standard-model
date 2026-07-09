@@ -65,36 +65,47 @@ new code that exercises it):**
    `[T^{ab},T^{cd}] = i(eta^{bc}T^{ad} - eta^{ac}T^{bd} - eta^{bd}T^{ac} +
    eta^{ad}T^{bc})`.
 3. an **honesty check, not an assumption**: whether `kotoba.sm.gauge`'s
-   compact-group trace normalization `Tr(T^aT^b)=1/2delta^ab` (documented
-   there as the basis for its `structure-constants` derivation, and verified
-   in that namespace's tests only for the compact `SU(2)`/`SU(3)`) carries
-   over to these noncompact `so(1,3)` generators. **It does not.** Numerically
-   (`kotoba.sm.gtg/generator-trace-gram`,
+   (Phase-0a-era) compact-group trace normalization `Tr(T^aT^b)=1/2delta^ab`
+   (documented there at the time as the basis for its `structure-constants`
+   derivation, and verified in that namespace's tests only for the compact
+   `SU(2)`/`SU(3)`) carries over to these noncompact `so(1,3)` generators. **It
+   did not.** Numerically (`kotoba.sm.gtg/generator-trace-gram`,
    `kotoba.sm.gtg/compact-group-trace-normalization-holds?`, and
    `gtg_test.cljc`): the Gram matrix `Tr(T_A T_B)` is diagonal (same structure
    as the compact case) but its diagonal entries are **+/-1, not a uniform
    +1/2** -- exactly -1 for the 3 boost-type generators and +1 for the 3
    rotation-type generators, i.e. the indefinite Minkowski signature leaks
    directly into the generators' own trace pairing. Applying
-   `kotoba.sm.gauge/structure-constants` to this generator set unmodified
-   therefore does **not** give the genuine `so(1,3)` structure constants: the
-   raw output is off by a factor `2*Tr(T_C T_C)` from the true value, which
-   means **the wrong magnitude (2x) for every triple, and additionally the
-   wrong SIGN whenever the third generator is boost-type**. A further,
-   related noncompactness symptom recorded in the same test file: the 3
-   boost-type generators are anti-Hermitian (not Hermitian), while the 3
-   rotation-type generators are Hermitian -- the textbook reason (Peskin &
-   Schroeder section 3.2) the Dirac spinor representation of the Lorentz
-   group is not unitary. None of this is patched or worked around here; it is
-   recorded as a numeric finding for any future phase that wants a corrected
-   generator normalization.
+   `kotoba.sm.gauge/structure-constants` (Phase-0a version) to this generator
+   set unmodified therefore did **not** give the genuine `so(1,3)` structure
+   constants: the raw output was off by a factor `2*Tr(T_C T_C)` from the true
+   value, i.e. **the wrong magnitude (2x) for every triple, and additionally
+   the wrong SIGN whenever the third generator was boost-type**. **This has
+   since been fixed**: `kotoba.sm.gauge/structure-constants` was generalized
+   to compute its own generator set's trace-Gram matrix `K[A][B]=Tr(T_AT_B)`
+   instead of assuming a uniform `1/2delta^AB` (identical output for
+   `SU(2)`/`SU(3)`, since their Gram matrix genuinely is `1/2delta^AB` -- see
+   `gauge_test.cljc`'s `structure-constants-matches-legacy-*` regression
+   tests), so applying it to this `so(1,3)` generator set now gives the
+   genuine structure constants, matching `kotoba.sm.gtg/true-structure-constants`
+   (`gtg_test.cljc`'s `structure-constants-now-match-genuine-values-after-gauge-fix`).
+   A further, related noncompactness symptom recorded in the same test file
+   (unaffected by the above fix): the 3 boost-type generators are
+   anti-Hermitian (not Hermitian), while the 3 rotation-type generators are
+   Hermitian -- the textbook reason (Peskin & Schroeder section 3.2) the Dirac
+   spinor representation of the Lorentz group is not unitary. The
+   `generator-trace-gram`/`true-structure-constants`/
+   `compact-group-trace-normalization-holds?` functions are kept as an
+   independent derivation and a live record of why the compact-group
+   assumption fails here, even though `kotoba.sm.gauge/structure-constants`
+   no longer needs a workaround.
 4. the rotation gauge field `Omega_mu` (a 6-component real bivector-valued
    gauge potential, in the same data shape `kotoba.sm.gauge` already uses)
    and its field strength / curvature bivector `R_mu-nu`, via
    `kotoba.sm.gauge/field-strength` applied to this generator set unmodified.
    The pure curl term `d_mu Omega_nu - d_nu Omega_mu` carries no
    normalization caveat (it does not involve structure constants at all); the
-   self-interaction term inherits the caveat from point 3.
+   self-interaction term uses the now-fixed `structure-constants` from point 3.
 5. the spin-connection covariant derivative on a Dirac spinor,
    `D_mu psi = d_mu psi - i g Omega_mu^k T_k psi`, via
    `kotoba.sm.gauge/covariant-derivative` applied to this generator set
