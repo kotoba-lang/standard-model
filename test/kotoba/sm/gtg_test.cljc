@@ -1249,3 +1249,224 @@
       (doseq [a (range 4)]
         (let [R-aa (gtg/riemann-map h-field x (gtg/wedge-vectors (nth h-x a) (nth h-x a)))]
           (is (every? #(= % 0.0) R-aa) (str "R(h_" a "^h_" a ")")))))))
+
+;; ---------------------------------------------------------------------------
+;; FRW COSMOLOGY (LDG 1998 section 6.6 "Cosmology", Table 6 / eq 6.169) -- a
+;; SECOND, genuinely NONZERO-curvature regression test for `curvature-scalar`,
+;; running the FULL h-field -> `omega-from-h` -> `riemann-basis-pair` ->
+;; `curvature-scalar` finite-difference PIPELINE end to end (not merely
+;; hand-building eq (6.169)'s Riemann OPERATOR in isolation, as PR #12's
+;; docs-only sign-convention investigation did in a standalone Python script
+;; -- see `curvature-scalar`'s own ARGUMENT-ORDER docstring section for that
+;; investigation's summary; it deliberately stopped short of porting the
+;; FRW/cosmology h-field into this codebase as a native test, which is what
+;; this section does). Schwarzschild's tests above cannot serve this role by
+;; themselves because Schwarzschild has R=0 identically -- a sign error is
+;; numerically invisible against a true-zero answer -- so this is the first
+;; NONZERO closed-form curvature-scalar value checked end to end through this
+;; namespace's actual numeric pipeline.
+;;
+;; TABLE 6 TRANSCRIPTION (ldg1998.pdf pages 74-75, read as PAGE IMAGES, not
+;; via `pdftotext` -- this repo's established practice, since `pdftotext` is
+;; independently known to corrupt overdots/subscripts on exactly this kind of
+;; formula, e.g. the Schwarzschild `schwarzschild-hbar` convention note
+;; above):
+;;
+;;   h-bar(a) = a + a.e_r [ (g1-1) e_r + H(t) r e_t ]                (Table 6)
+;;   g1^2 = 1 - k r^2 exp(-2 INTEGRAL_0^t H(t') dt')
+;;   omega(a) = H(t) a^e_t - (g1-1)/r a^(e_r e_t) e_t
+;;   8*pi*rho/3 = H(t)^2 - Lambda/3 + k exp(-2 INTEGRAL_0^t H(t') dt')
+;;   Hdot + H^2 - Lambda/3 = -4pi/3 (rho+3p)
+;;   rhodot = -3 H(t) (rho+p)
+;;   R(B) = 4pi(rho+p) B.e_t e_t - (1/3)(8pi*rho+Lambda) B              (6.169)
+;;
+;; where '.' in 'a.e_r' is, EXACTLY as `schwarzschild-hbar` above already
+;; independently found for LDG eq (6.79)'s SAME h-bar(a)-style formula, the
+;; EUCLIDEAN 3D dot product of a's spatial components with the unit radial
+;; vector e_r, NOT `kotoba.sm.tensor/dot`'s Minkowski pairing -- NOT assumed
+;; here by analogy with Schwarzschild but INDEPENDENTLY re-confirmed by
+;; substituting a=e_r into Table 6's general h-bar(a) formula above and
+;; cross-checking the result against Table 5's (page 73, PRE-homogenization)
+;; PER-BASIS-VECTOR statement of the SAME h-bar function, h-bar(e_r) =
+;; g1 e_r + g2 e_t (g2 = r*H(t) in the homogeneous case, eq 6.159): only the
+;; EUCLIDEAN convention reproduces this (substituting a=e_r: under Euclidean,
+;; a.e_r=1, giving h-bar(e_r)=e_r+[(g1-1)e_r+H(t)r e_t]=g1 e_r+H(t)r e_t,
+;; MATCHING Table 5 exactly; under Minkowski, a.e_r=eta(e_r,e_r)=-1, giving
+;; h-bar(e_r)=e_r-[(g1-1)e_r+H(t)r e_t]=(2-g1)e_r-H(t)r e_t, which does NOT
+;; match Table 5 for any g1 != 1) -- `de-sitter-hbar-matches-table-5-per-
+;; basis-form` below checks this numerically at a concrete point.
+;;
+;; PURE DE SITTER SPECIALIZATION (k=0 spatially flat, rho=p=0, Lambda>0),
+;; the task's chosen simplest starting case: k=0 collapses g1^2=1-k r^2(...)
+;; to g1=1 identically (for all r,t), so the (g1-1) term in h-bar(a)
+;; vanishes; rho=p=0 in Hdot+H^2-Lambda/3=-4pi/3(rho+3p)=0 forces Hdot=0
+;; (constant H), giving H^2=Lambda/3, i.e. H(t)=H0=sqrt(Lambda/3) (the
+;; standard de Sitter Hubble constant); the density equation
+;; 8*pi*0/3 = H0^2-Lambda/3+0*exp(...) = 0 checks out (H0^2=Lambda/3 exactly
+;; cancels), and T(a)=(rho+p)(a.e_t)e_t-p*a is IDENTICALLY ZERO for rho=p=0
+;; -- i.e. this is a genuine T_ab=0 (source-free) solution, squarely within
+;; `omega-from-h`/`curvature-scalar`'s already-documented VACUUM (T_ab=0)
+;; scope (the namespace docstring's PHASE 1 SCOPE NOTE), just with a nonzero
+;; cosmological constant Lambda added to the vacuum field equation -- NOT an
+;; extension beyond that documented scope. So:
+;;
+;;   h-bar(a) = a + H0 r (a.e_r) e_t
+;;
+;; and since H0 r (a.e_r) = H0 * (a's spatial part . x, Euclidean) reduces,
+;; for a=e_i a coordinate basis vector, to exactly H0*x_i (r*n_i=x_i, no
+;; explicit r or unit-radial-vector computation needed), this is a SMOOTH,
+;; r=0-NONSINGULAR closed form in Cartesian [t,x,y,z] coordinates -- unlike
+;; Schwarzschild's sqrt(2M/r), no 1/r or 1/sqrt(r) singularity at the origin.
+;; H0 is a genuine CONSTANT (not merely "H(t) evaluated at this t"), so this
+;; h-field does not depend on t at all -- `de-sitter-h-field` may be
+;; evaluated at any t with no effect on the result, checked below.
+;;
+;; DECLINED EXTENSION, HONESTLY REPORTED (per this task's own instruction not
+;; to force an unconfident implementation): a nonzero-density extension
+;; (e.g. pure dust, rho>0, p=Lambda=0, k=0, H(t)=2/(3t) the standard
+;; Einstein-de-Sitter matter-dominated solution) was investigated but NOT
+;; landed. `omega-from-h` applied to that h-field numerically reproduces
+;; Table 6's own omega(a)=H(t) a^e_t closed form faithfully (both value AND
+;; time-derivative, checked against H(t) and Hdot(t) directly), and
+;; `riemann-basis-pair`'s antisymmetry still holds -- but the resulting
+;; `curvature-scalar` did NOT match the independently-verified trace
+;; identity R=-8*pi*(rho-3p)-4*Lambda (confirmed correct via a standalone,
+;; genuinely independent Python ga_algebra double-contraction of eq (6.169)
+;; at this same rho, matching to the same precision the PR #12 investigation
+;; already validated at 4 other points). The discrepancy traces to the
+;; 4*pi*(rho+p)*(B.e_t)e_t term in eq (6.169) -- a VECTOR.BIVECTOR contraction
+;; whose direction (B.e_t vs e_t.B; these differ by a sign in general GA,
+;; a.B=-B.a for a vector a and bivector B) this pass could not independently
+;; and confidently pin down against this codebase's `vector-dot-bivector`
+;; convention within the task's scope, and this term is IDENTICALLY ZERO
+;; whenever rho+p=0 -- exactly the pure-de-Sitter case above, which is why
+;; THAT case is unaffected and safe to land while a genuine nonzero-density
+;; extension is not. This is left as a named, explicit follow-up rather than
+;; risked as a plausible-looking but silently wrong test -- the same
+;; discipline this namespace's docstrings already apply elsewhere (see e.g.
+;; `curvature-quadratic-invariant`'s and `reciprocal-frame`'s own HONESTY
+;; NOTEs).
+;; ---------------------------------------------------------------------------
+
+(defn- de-sitter-hbar
+  "LDG Table 6 (homogeneous perfect fluid, section 6.6 'Cosmology'),
+  specialized to k=0 (spatially flat), rho=p=0, Lambda>0 (PURE DE SITTER --
+  see this section's header comment for the full derivation and the
+  Euclidean-vs-Minkowski dot-product convention confirmation): h-bar(a) =
+  a + H0*r*(a.e_r)*e_t, where H0 = sqrt(Lambda/3) (constant, the de Sitter
+  Hubble parameter), '.' is the EUCLIDEAN 3D dot product of a's spatial
+  components with the unit radial vector e_r (NOT `kotoba.sm.tensor/dot`'s
+  Minkowski pairing), and r=|x| the Euclidean spatial radius. Since
+  H0*r*n_i = H0*x_i for the unit radial component n_i=x_i/r, this simplifies
+  to a smooth closed form with no r=0 singularity and no explicit r/n
+  computation needed. Returns the STORED-convention 4x4 matrix (row mu =
+  h-bar(e_mu), same layout `schwarzschild-hbar`/`h`/`position-gauge-identity`
+  use)."
+  [x Lambda]
+  (let [[_ x1 x2 x3] x
+        H0 (Math/sqrt (/ Lambda 3.0))]
+    [[1.0 0.0 0.0 0.0]
+     [(* H0 x1) 1.0 0.0 0.0]
+     [(* H0 x2) 0.0 1.0 0.0]
+     [(* H0 x3) 0.0 0.0 1.0]]))
+
+(defn- de-sitter-h
+  "h = `gtg/frame-adjoint` of `de-sitter-hbar` -- this codebase's `h`-shaped
+  position-gauge-field convention (LDG states this solution hbar-FIRST, same
+  as Schwarzschild -- see `schwarzschild-h`'s own docstring for why
+  `frame-adjoint` is the right conversion; the same reasoning applies here
+  unchanged)."
+  [x Lambda]
+  (gtg/frame-adjoint (de-sitter-hbar x Lambda)))
+
+(defn- de-sitter-h-field [Lambda] (fn [x] (de-sitter-h x Lambda)))
+
+(deftest de-sitter-hbar-matches-table-5-per-basis-form
+  (testing "h-bar(e_t) = e_t exactly (e_t has no spatial component, so
+            a.e_r=0 for a=e_t regardless of the Euclidean-vs-Minkowski
+            convention question -- a necessary but not by itself
+            distinguishing check)"
+    (let [x [0.0 3.0 4.0 0.0] Lambda 0.1]
+      (is (= [1.0 0.0 0.0 0.0] (first (de-sitter-hbar x Lambda))))))
+  (testing "h-bar(e_r) = g1*e_r + H0*r*e_t = e_r + H0*r*e_t (g1=1 for k=0) --
+            THE decisive Euclidean-vs-Minkowski check: computed here via
+            `tensor/mat-vec` on `de-sitter-hbar`'s STANDARD-convention
+            transpose (the same way `gtg.cljc`'s own H-field/omega-from-h
+            pipeline applies h-bar to a vector), at x=[0 3 4 0] (r=5, unit
+            radial e_r=(0.6,0.8,0))"
+    (let [x [0.0 3.0 4.0 0.0] Lambda 0.1
+          H0 (Math/sqrt (/ Lambda 3.0))
+          r 5.0
+          e-r [0.0 0.6 0.8 0.0]
+          e-t [1.0 0.0 0.0 0.0]
+          hbar-mat (de-sitter-hbar x Lambda)
+          hbar-of-er (tensor/mat-vec (tensor/mat-transpose hbar-mat) e-r)
+          expected (tensor/v+ e-r (tensor/v-scale (* H0 r) e-t))]
+      (doseq [i (range 4)]
+        (is (close? (nth hbar-of-er i) (nth expected i))
+            (str "h-bar(e_r)[" i "] = (e_r + H0*r*e_t)[" i "]")))
+      (testing "and this is genuinely DIFFERENT from what the Minkowski-dot
+                convention would give ((2-g1)e_r - H0*r*e_t = e_r - H0*r*e_t
+                for g1=1), confirming the two conventions are numerically
+                distinguishable at this point, not coincidentally equal"
+        (let [minkowski-convention-would-give (tensor/v- e-r (tensor/v-scale (* H0 r) e-t))]
+          (is (not (close? (nth hbar-of-er 0) (nth minkowski-convention-would-give 0))))))))
+  (testing "h-bar(e_theta)=e_theta, h-bar(e_phi)=e_phi hold trivially here too
+            (a direction perpendicular to e_r, spatial-only, has a.e_r=0
+            under either convention) -- concretely, e_z is perpendicular to
+            e_r=(0.6,0.8,0) at this point"
+    (let [x [0.0 3.0 4.0 0.0] Lambda 0.1
+          e-z [0.0 0.0 0.0 1.0]
+          hbar-mat (de-sitter-hbar x Lambda)
+          hbar-of-ez (tensor/mat-vec (tensor/mat-transpose hbar-mat) e-z)]
+      (is (= e-z hbar-of-ez)))))
+
+;; -- Test point A: x=[0 3 4 0] (r=5), Lambda=0.1 --
+;; -- Test point B: x=[0 1 2 2] (r=3), Lambda=0.05 --
+;; -- Test point C: x=[0 1 1 1] (r=sqrt(3)), Lambda=0.2 --
+;; three distinct (spatial point, Lambda) combinations, per the task's
+;; requirement of checking against the closed-form expectation at "at least
+;; 2 different Lambda values/spatial points".
+
+(deftest curvature-scalar-matches-minus-4-lambda-for-pure-de-sitter-cosmology
+  (testing "R = -4*Lambda (LDG eq 6.169 at rho=p=0: R(B)=-(Lambda/3)*B, an
+            ISOTROPIC scalar multiple of the identity map on bivectors, as
+            maximal symmetry requires; independently re-derived by hand from
+            LDG eqs (4.11)/(4.12) [Ricci(b)=sum_a gamma^a.R(e_a^b),
+            R=sum_b gamma^b.Ricci(e_b)] using the GA identity
+            v.(u^w)=(v.u)w-(v.w)u and the frame-trace identity
+            sum_a gamma^a.e_a=4 this namespace's own curvature-scalar
+            formula already relies on (see its docstring): for R=c*Identity,
+            Ricci(e_j)=3c*e_j for every basis vector e_j, so
+            R_scalar=sum_j gamma^j.(3c e_j)=3c*4=12c; c=-Lambda/3 here gives
+            R_scalar=12*(-Lambda/3)=-4*Lambda -- matching eq (6.169)'s own
+            rho=p=0 special case, not merely restated from it), checked
+            through the FULL h-field->omega-from-h->riemann-basis-pair->
+            curvature-scalar finite-difference pipeline at 3 independent
+            (spatial point, Lambda) combinations"
+    (doseq [[x Lambda label] [[[0.0 3.0 4.0 0.0] 0.1 "A"]
+                              [[0.0 1.0 2.0 2.0] 0.05 "B"]
+                              [[0.0 1.0 1.0 1.0] 0.2 "C"]]]
+      (let [h-field (de-sitter-h-field Lambda)
+            R (gtg/curvature-scalar h-field x)
+            R-expected (* -4.0 Lambda)]
+        (is (close-fd? R R-expected)
+            (str "point " label ": curvature-scalar at x=" x " Lambda=" Lambda
+                 " => " R " (expected " R-expected ")")))))
+  (testing "sanity: R is genuinely nonzero (unlike the Schwarzschild vacuum
+            tests above) -- this is the load-bearing property that makes
+            this a real nonzero-curvature sign/magnitude check, not another
+            R=0 test that a sign error could hide behind"
+    (let [R (gtg/curvature-scalar (de-sitter-h-field 0.1) [0.0 3.0 4.0 0.0])]
+      (is (> (Math/abs (double R)) 0.1))))
+  (testing "t-independence: H0=sqrt(Lambda/3) is a genuine CONSTANT for pure
+            de Sitter, so curvature-scalar at the SAME spatial point is
+            identical (to finite-difference precision) at two different t
+            values -- a structural consequence of `de-sitter-h-field` not
+            depending on x[0], not a separately-asserted physical claim"
+    (let [h-field (de-sitter-h-field 0.1)
+          R-t0 (gtg/curvature-scalar h-field [0.0 3.0 4.0 0.0])
+          R-t1 (gtg/curvature-scalar h-field [1.0 3.0 4.0 0.0])
+          R-t2 (gtg/curvature-scalar h-field [-2.5 3.0 4.0 0.0])]
+      (is (close-fd? R-t0 R-t1))
+      (is (close-fd? R-t0 R-t2)))))
