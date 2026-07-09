@@ -1546,27 +1546,47 @@
   since both indices here are always fixed basis vectors, never
   position-gauge-field rows -- `riemann-basis-pair` DIRECTLY.
 
-  ARGUMENT-ORDER CAVEAT (read before relying on the SIGN of a nonzero result):
-  the code below calls `riemann-basis-pair` h-field x b a (b first, a second),
-  chosen to match which gamma contracts FIRST (gamma-b, the inner
-  `vector-dot-bivector` call) against which slot of eq (4.11)'s R(e_a^b) --
-  re-derived by hand from (4.11)/(4.12)'s structure (Ricci(free-index) =
-  sum_{summed-index} gamma^{summed}.R(e_{summed}^e_{free}), the summed index
-  occupying R's FIRST slot) and cross-checked for self-consistency against the
-  SAME convention this fix's own verification script used to independently
-  confirm the Ricci TENSOR vanishes (see below). BUT: because
-  `riemann-basis-pair` is antisymmetric (R(a^b)=-R(b^a)), swapping this
-  argument order flips the SIGN of the returned scalar -- and the ONLY
-  verification available (LDG's Schwarzschild solution) has R=0 identically,
-  so it CANNOT empirically distinguish this choice from its negative (a sign
-  error would be numerically invisible against a true-zero answer). The
-  MAGNITUDE fix above (eliminating the genuine ~1e-4 spurious asymmetric
-  Ricci-tensor component) is independently, empirically verified; THIS
-  specific sign/argument-order choice is only algebraically justified, not
-  independently numerically confirmed -- flagged honestly rather than
-  asserted with the same confidence, pending either a literature worked
-  example with a NONZERO known curvature-scalar value, or independent expert
-  review of the (4.11)/(4.12) argument-order derivation above.
+  ARGUMENT-ORDER (SIGN CONVENTION), NOW NUMERICALLY CONFIRMED: the code below
+  calls `riemann-basis-pair` h-field x b a (b first, a second), matching which
+  gamma contracts FIRST (gamma-b, the inner `vector-dot-bivector` call)
+  against which slot of eq (4.11)'s R(e_a^b) -- re-derived by hand from
+  (4.11)/(4.12)'s structure (Ricci(free-index) = sum_{summed-index}
+  gamma^{summed}.R(e_{summed}^e_{free}), the summed index occupying R's FIRST
+  slot). Because `riemann-basis-pair` is antisymmetric (R(a^b)=-R(b^a)),
+  swapping this argument order flips the SIGN of the returned scalar, and
+  LDG's Schwarzschild solution (R=0 identically) cannot empirically
+  distinguish this choice from its negative on its own -- so this order was
+  independently checked a SECOND way, against a NONZERO worked example:
+  LDG 1998 section 6.6 'Cosmology' (PDF pages 72-78, read as page IMAGES, not
+  `pdftotext`), Table 6's homogeneous perfect-fluid-plus-Lambda solution and
+  its closed-form covariant curvature, eq (6.169). Contracting LDG's own field
+  equation (4.36), G(a)-Lambda*a=kappa*T(a), with the SAME frame trace
+  identity this function uses (sum_a gamma^a.e_a=4) gives, independently of
+  any implementation choice, R_expected = -8*pi*(rho-3*p) - 4*Lambda for a
+  perfect fluid T(a)=(rho+p)(a.e_t)e_t-p*a. Built eq (6.169)'s R(B) as an
+  explicit bivector-map and ran it through the SAME contraction this function
+  performs (both argument orders) at 4 independent (rho,p,Lambda) points
+  (general fluid+Lambda, pure dust, pure de Sitter, p=-rho): riemann-basis-pair
+  h-field x b a (a first, a second) MATCHED R_expected in all 4 cases; the
+  flipped order matched its negation in all 4 -- e.g. rho=0.7,p=0,Lambda=0 ->
+  R_expected=-17.592919 matched the (b,a) order exactly, not the (a,b) order.
+  Independently re-derived R_expected=-8*pi*(rho-3*p)-4*Lambda by hand from
+  eq (4.36) and confirmed all 4 reported values arithmetically before trusting
+  this conclusion. Further corroborated by matching index-order notation
+  (summed index first) in two other independent primary sources: Lewis/Doran/
+  Lasenby gr-qc/9910039 eq (14) (R_a=gamma^b.R_ba, R=gamma^a.R_a) and Francis/
+  Kosowsky gr-qc/0311007 eq (2.26)/(2.29). This upgrades the sign convention
+  from 'algebraically re-derived only' (as an earlier version of this
+  docstring said) to numerically confirmed against a non-trivial published
+  closed-form solution. This confirmation was done in a standalone scratch
+  script (Python, reusing the `ga_algebra.py` reference engine already used
+  to validate the Schwarzschild pipeline), NOT yet as a `kotoba.sm.gtg`-native
+  regression test -- porting the FRW/cosmology h-field itself into this
+  codebase (Table 6's h-bar, including pinning down whether its 'a.e_r' uses
+  the same Euclidean-not-Minkowski dot convention Schwarzschild's eq (6.79)
+  turned out to use, re-verified from PDF page images rather than assumed by
+  analogy) is tracked as separate follow-up work, kept out of this docstring
+  update to avoid asserting a landed test that does not yet exist here.
 
   VERIFIED (gtg_test.cljc): 0.0, within finite-difference-truncation
   tolerance, for LDG's own Schwarzschild vacuum solution (eq 6.79) at
