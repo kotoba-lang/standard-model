@@ -68,6 +68,24 @@
                         1e-9)
           (str "[T^" a b ",T^" cc d "]")))))
 
+(deftest generator-is-antisymmetric-and-vanishes-on-the-diagonal
+  (testing "T^{ab} = -T^{ba} for EVERY a,b in 0..3 (not just the a<b enumeration
+            `generators`/`generator-index-pairs` stores directly -- `generator` extends that to
+            all 16 (a,b) pairs via antisymmetry, so this exercises `generator`'s own a>b and a=b
+            branches, not merely re-checking the a<b storage)"
+    (doseq [a (range 4) b (range 4)]
+      (is (c/m-approx= (gtg/generator a b) (c/m-rscale -1 (gtg/generator b a)) 1e-9)
+          (str "T^{" a b "} = -T^{" b a "}"))))
+  (testing "T^{aa} is EXACTLY (not merely ~0) the 4x4 zero matrix, for every a in 0..3 -- forced by
+            antisymmetry (T^{aa}=-T^{aa} implies T^{aa}=0), and `generator`'s a=b branch returns
+            the literal zero matrix rather than computing and cancelling a nonzero one"
+    (doseq [a (range 4)]
+      (is (= (gtg/generator a a) (c/m-zero 4 4)) (str "T^{" a a "} = 0"))))
+  (testing "concretely, for a mixed boost/rotation off-diagonal pair not in generator-index-pairs'
+            a<b storage order: T^{3 0} = -T^{0 3} (T^{0 3} IS directly stored; T^{3 0} exercises the
+            a>b branch)"
+    (is (c/m-approx= (gtg/generator 3 0) (c/m-rscale -1 (gtg/generator 0 3)) 1e-9))))
+
 ;; ---------------------------------------------------------------------------
 ;; 3. THE load-bearing honesty check: Tr(T^aT^b)=1/2delta^ab does NOT hold for
 ;;    these noncompact so(1,3) generators.
@@ -186,6 +204,82 @@
           R (gtg/rotation-field-strength d-Omega Omega 1.0)]
       (is (every? #(close? % 0.0) (flatten R))))))
 
+(deftest rotation-field-strength-antisymmetric-for-same-trace-gram-sign-components
+  (testing "R_mu-nu = -R_nu-mu with BOTH nonzero d-Omega (curl term) AND nonzero Omega (so the
+            self-interaction term g f^abc Omega_mu^b Omega_nu^c is genuinely exercised), using two
+            EXCITED bivector components that are the same 'trace-Gram-sign' type -- both
+            rotation-type (indices 3 and 4, `generator-trace-gram` diagonal +1 each). Checked over
+            every (mu,nu) pair, not just one."
+    (let [zero6 (vec (repeat 6 0.0))
+          d-Omega (-> (vec (repeat 4 (vec (repeat 4 zero6))))
+                      (assoc-in [0 1] (assoc zero6 3 1.0 4 0.5))
+                      (assoc-in [1 0] (assoc zero6 3 0.2 5 -0.3)))
+          Omega (vec (repeat 4 (assoc zero6 3 0.5 4 0.7)))
+          R (gtg/rotation-field-strength d-Omega Omega 1.0)]
+      (doseq [mu (range 4) nu (range 4) k (range 6)]
+        (is (close? (get-in R [mu nu k]) (- (get-in R [nu mu k])))
+            (str "R[" mu "][" nu "][" k "] = -R[" nu "][" mu "][" k "]")))))
+  (testing "same check, for two boost-type components (indices 0 and 1, Gram diagonal -1 each)"
+    (let [zero6 (vec (repeat 6 0.0))
+          d-Omega (-> (vec (repeat 4 (vec (repeat 4 zero6))))
+                      (assoc-in [0 1] (assoc zero6 0 1.0 1 0.5))
+                      (assoc-in [1 0] (assoc zero6 0 0.2 2 -0.3)))
+          Omega (vec (repeat 4 (assoc zero6 0 0.5 1 0.7)))
+          R (gtg/rotation-field-strength d-Omega Omega 1.0)]
+      (doseq [mu (range 4) nu (range 4) k (range 6)]
+        (is (close? (get-in R [mu nu k]) (- (get-in R [nu mu k])))
+            (str "R[" mu "][" nu "][" k "] = -R[" nu "][" mu "][" k "]"))))))
+
+(deftest rotation-field-strength-self-interaction-not-antisymmetric-for-mixed-trace-gram-sign-components
+  "HONEST SCOPE-GAP RECORD, found while hardening this test suite's antisymmetry coverage (not
+  previously exercised by any existing test -- both existing rotation-field-strength tests above
+  either zero out Omega entirely, so the self-interaction term never fires, or excite only a SINGLE
+  bivector component against itself, whose self-interaction is f^{akk}=0 by total antisymmetry of
+  the first two indices of the RAW commutator trace regardless of normalization).
+
+  `kotoba.sm.gauge/field-strength`'s self-interaction term g f^abc Omega_mu^b Omega_nu^c is
+  antisymmetric under mu<->nu swap only when, for every pair of EXCITED field components (b,c),
+  the trace-Gram diagonal entries K[b][b] and K[c][c] agree (true automatically for su(2)/su(3),
+  whose Gram is uniformly 1/2 -- see gauge_test.cljc's
+  `field-strength-antisymmetric-under-mu-nu-swap` -- and true here whenever both excited Omega
+  components are the SAME type, both boost or both rotation -- see
+  `rotation-field-strength-antisymmetric-for-same-trace-gram-sign-components` above). Derivation:
+  f[A][B][D] = -i Tr([T_A,T_B]T_D)/K[D][D], and g_ABD := -i Tr([T_A,T_B]T_D) (no /K[D][D]) is
+  TOTALLY antisymmetric in A,B,D for any generator set (a generic trace-of-commutator identity, not
+  specific to this basis). Swapping the summed pair (b,c) in the self-interaction term compares
+  f[a][b][c]=g_abc/K[c][c] against f[a][c][b]=g_acb/K[b][b]=-g_abc/K[b][b]; these are negatives of
+  each other (giving antisymmetry) only when K[b][b]=K[c][c]. For this so(1,3) generator set,
+  `compact-group-trace-normalization-holds?` already records that K is +1 for rotation-type indices
+  and -1 for boost-type indices -- NOT uniform -- so mixing one boost-type and one rotation-type
+  excited component breaks the antisymmetry that `field-strength`'s formula silently assumes.
+
+  This is a currently-unfixed correctness gap in reusing `kotoba.sm.gauge/field-strength` unmodified
+  for this noncompact generator set (distinct from, and not covered by, the non-diagonal-Gram scope
+  note already documented in kotoba.sm.gauge's namespace docstring -- this K IS diagonal, just not
+  uniform). Recorded honestly as a live regression check of the CURRENT numeric output -- matching
+  this namespace's existing practice of exposing known non-idealities as re-checkable predicates
+  rather than asserting them away (`compact-group-trace-normalization-holds?`) -- NOT asserted here
+  as correct or desired behavior. A fix belongs in `kotoba.sm.gauge`/`kotoba.sm.gtg` production
+  code, out of scope for this test-only change."
+  (testing "Omega_mu(x)^k excites ONE boost-type component (index 0, 'boost-x') in the mu=0
+            direction slot and ONE DIFFERENT rotation-type component (index 3, 'rotation-z') in the
+            mu=1 direction slot -- so R[0][1]'s self term multiplies Omega_0^0 * Omega_1^3 (picking
+            out f[a][0][3]) while R[1][0]'s self term multiplies Omega_1^3 * Omega_0^0 (picking out
+            f[a][3][0]), isolating exactly the f[a][0][3] vs f[a][3][0] comparison the derivation
+            above is about. Zero d-Omega (curl term is trivially antisymmetric on its own, so this
+            isolates the self-interaction term). The two excited-component-1 ('boost-y', itself
+            boost-type) output slots of R[0][1] and R[1][0] come out EQUAL, not negatives -- if
+            field-strength were antisymmetric here they would be +0.35 and -0.35"
+    (let [zero6 (vec (repeat 6 0.0))
+          Omega [(assoc zero6 0 0.5) (assoc zero6 3 0.7) zero6 zero6]
+          zero-d (vec (repeat 4 (vec (repeat 4 zero6))))
+          R (gtg/rotation-field-strength zero-d Omega 1.0)]
+      (is (close? (get-in R [0 1 1]) 0.35))
+      (is (close? (get-in R [1 0 1]) 0.35))
+      (is (not (close? (get-in R [1 0 1]) (- (get-in R [0 1 1]))))
+          "documents the gap: R[1][0][1] should equal -R[0][1][1]=-0.35 if antisymmetric, but is
+           observed to equal +R[0][1][1]=+0.35 instead"))))
+
 ;; ---------------------------------------------------------------------------
 ;; 5+6. spin-connection covariant derivative on a Dirac spinor, and the flat
 ;;      limit against kotoba.sm.spinor's free Dirac equation
@@ -271,6 +365,35 @@
             same 4x4 integer identity matrix"
     (let [g (gtg/derived-metric (vf/boost [0 0 0]))]
       (is (= g tensor/metric)))))
+
+(deftest derived-metric-is-symmetric-for-a-general-non-identity-h
+  (testing "g_mu-nu = g_nu-mu for a GENERAL position-gauge field h with nonzero off-diagonal
+            entries in every row -- neither position-gauge-identity (the exact-integer-arithmetic
+            flat case above) nor a Lorentz transformation (the global-special-case above), so this
+            is a genuinely distinct, non-trivial check of derived-metric's own symmetry rather than
+            a restatement of either existing flat-limit check. Symmetry holds algebraically because
+            g_mu-nu = h_mu . h_nu = eta_ab h_mu^a h_nu^b, and `kotoba.sm.tensor/dot` is symmetric in
+            its two four-vector arguments for ANY pair (eta is diagonal, so swapping the two
+            four-vectors just commutes the per-component real multiplications) -- checked here
+            component by component, not merely spot-checked"
+    (let [h [[1.2 0.3 -0.1 0.0]
+             [0.2 0.9 0.4 0.1]
+             [0.05 -0.2 1.1 0.3]
+             [-0.1 0.0 0.2 1.0]]
+          g (gtg/derived-metric h)]
+      (is (not= (get-in h [0 1]) (get-in h [1 0]))
+          "sanity: h itself is not symmetric, so this is a genuine check of derived-metric, not
+           merely re-observing a symmetric input")
+      (is (not (vf/lorentz? h)) "sanity: h is not itself a Lorentz transformation")
+      (doseq [mu (range 4) nu (range 4)]
+        (is (close? (get-in g [mu nu]) (get-in g [nu mu]))
+            (str "g[" mu "][" nu "] = g[" nu "][" mu "]")))
+      (testing "concretely, one representative off-diagonal component computed by hand:
+                g_01 = h_0 . h_1 = eta_ab h_0^a h_1^b = h_0^0 h_1^0 - h_0^1 h_1^1 - h_0^2 h_1^2 -
+                h_0^3 h_1^3 = (1.2)(0.2) - (0.3)(0.9) - (-0.1)(0.4) - (0.0)(0.1) = 0.24 - 0.27 +
+                0.04 - 0 = 0.01"
+        (is (close? (get-in g [0 1]) 0.01))
+        (is (close? (get-in g [1 0]) 0.01))))))
 
 ;; ---------------------------------------------------------------------------
 ;; 10. Phase 0c -- curvature quadratic invariant (narrowly scoped, NOT the
