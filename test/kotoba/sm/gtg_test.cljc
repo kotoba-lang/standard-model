@@ -983,3 +983,269 @@
           (let [R-mn (ricci-tensor-component h-field x mu nu)]
             (is (close-fd? R-mn 0.0)
                 (str "Ricci[" mu "][" nu "] at x=" x " M=" M " => " R-mn))))))))
+
+;; ---------------------------------------------------------------------------
+;; COVERAGE-STRENGTHENING PASS (no implementation changes) -- these deftests
+;; add EDGE CASES and STRUCTURAL PROPERTIES beyond the Schwarzschild-solution
+;; regression tests above: riemann-map's claimed LINEARITY on the bivector
+;; space, the ORDER (not just magnitude) of curvature-scalar's
+;; finite-difference convergence, frame-adjoint's involution property on
+;; general (non-Schwarzschild-derived) matrices, zero/parallel-vector edge
+;; cases for wedge-vectors/vector-dot-bivector/bivector-commutator, the
+;; identity-matrix case of outermorphism (previously untested), and an
+;; extension of riemann-basis-pair's already-tested vector-argument
+;; antisymmetry to GENERAL (non-coordinate-basis) bivectors via riemann-map.
+;; ---------------------------------------------------------------------------
+
+(deftest riemann-map-is-linear-in-its-bivector-argument
+  (testing "R(c1*B1 + c2*B2) = c1*R(B1) + c2*R(B2) for concrete non-trivial
+            bivectors B1=sigma_r, B2=B_perp (the SAME two bivectors
+            riemann-map-matches-ldg-673-closed-form-* above already verify
+            against LDG's own closed-form curvature at point A) and
+            non-trivial, non-integer, opposite-signed scalars c1=2.3,
+            c2=-0.7 -- riemann-map-matrix's own docstring states R is a
+            genuine LINEAR map on the 6-dimensional bivector space
+            (`(tensor/mat-vec (riemann-map-matrix ...) B)`), so this is a
+            direct numeric check of that claim through the PUBLIC
+            `riemann-map` entry point (not merely re-deriving in the
+            abstract that matrix-vector multiplication is linear)"
+    (let [x [0.0 3.0 4.0 0.0]
+          h-field (schwarzschild-h-field 0.1)
+          [nx ny nz] (unit-radial x)
+          e-r [0.0 nx ny nz]
+          e-z [0.0 0.0 0.0 1.0]
+          B1 (gtg/wedge-vectors e-r e-t)   ;; sigma_r
+          B2 (gtg/wedge-vectors e-z e-t)   ;; B_perp
+          c1 2.3
+          c2 -0.7
+          combined (tensor/v+ (tensor/v-scale c1 B1) (tensor/v-scale c2 B2))
+          R-combined (gtg/riemann-map h-field x combined)
+          R-B1 (gtg/riemann-map h-field x B1)
+          R-B2 (gtg/riemann-map h-field x B2)
+          R-linear-combo (tensor/v+ (tensor/v-scale c1 R-B1) (tensor/v-scale c2 R-B2))]
+      (testing "sanity: B1, B2 and the combined bivector are genuinely
+                distinct and non-trivial (not accidentally zero or equal)"
+        (is (some #(> (Math/abs (double %)) 0.1) B1))
+        (is (some #(> (Math/abs (double %)) 0.1) B2))
+        (is (not= B1 B2))
+        (is (some #(> (Math/abs (double %)) 0.1) combined)))
+      (doseq [k (range 6)]
+        (is (close-fd? (nth R-combined k) (nth R-linear-combo k) 1e-9)
+            (str "R(c1*B1+c2*B2)[" k "] = c1*R(B1)[" k "] + c2*R(B2)[" k "]")))))
+  (testing "a second, independent (B1,B2,c1,c2) combination at point B, using
+            wedge-vectors of two of the position-gauge field's OWN rows
+            h(e_1),h(e_2) (a genuinely different, non-coordinate-aligned kind
+            of bivector than sigma_r/B_perp above) combined with B_perp,
+            scalars c1=-1.6, c2=3.1"
+    (let [x [0.0 1.0 2.0 2.0]
+          h-field (schwarzschild-h-field 0.05)
+          h-x (h-field x)
+          B1 (gtg/wedge-vectors (nth h-x 1) (nth h-x 2))
+          s (/ 1.0 (Math/sqrt 2.0))
+          e-perp [0.0 0.0 s (- s)]
+          B2 (gtg/wedge-vectors e-perp e-t)
+          c1 -1.6
+          c2 3.1
+          combined (tensor/v+ (tensor/v-scale c1 B1) (tensor/v-scale c2 B2))
+          R-combined (gtg/riemann-map h-field x combined)
+          R-linear-combo (tensor/v+ (tensor/v-scale c1 (gtg/riemann-map h-field x B1))
+                                     (tensor/v-scale c2 (gtg/riemann-map h-field x B2)))]
+      (doseq [k (range 6)]
+        (is (close-fd? (nth R-combined k) (nth R-linear-combo k) 1e-9)
+            (str "R(c1*B1+c2*B2)[" k "] = c1*R(B1)[" k "] + c2*R(B2)[" k "] (point B)"))))))
+
+(deftest curvature-scalar-finite-difference-error-shows-second-order-convergence
+  (testing "at a fixed Schwarzschild test point/mass, halving fd-h should
+            roughly QUARTER curvature-scalar's residual error (central
+            finite differences are 2nd-order accurate, and curvature-scalar's
+            own true value is EXACTLY 0.0 for this vacuum solution --
+            curvature-scalar-vanishes-for-schwarzschild-vacuum-solution above
+            -- so |curvature-scalar(fd-h)| IS the leading-order truncation
+            error itself, with no separate 'expected value' bookkeeping
+            needed). This is a STRONGER check than 'close to 0 at the
+            default step': it verifies the ORDER of convergence, which would
+            catch a formula bug that happens to cancel numerically near the
+            default fd-h without actually having the claimed O(fd-h^2)
+            truncation behavior.
+
+            fd-h VALUES: kotoba.sm.gtg's PHASE 1 header comment says
+            default-fd-h=2e-4 is calibrated to ~1e-9..1e-10 precision for
+            THIS nested-finite-difference pipeline (an inner curl FD wrapped
+            in an outer directional-derivative FD). Empirically (checked
+            while writing this test, not merely assumed) fd-h values in that
+            same ~1e-4..1e-3 neighborhood are ALREADY close enough to that
+            round-off floor that the nested/doubly-differenced pipeline's own
+            floating-point noise breaks the clean quadratic trend (e.g. the
+            error can even increase, or its sign can flip, going from
+            fd-h=2e-4 to fd-h=1e-4). This test therefore uses a somewhat
+            LARGER fd-h range (1.6e-2, 8e-3, 4e-3) where truncation error
+            (~1e-8..1e-9, comfortably above the round-off floor) dominates
+            and the O(h^2) ratio comes out cleanly (~4.00, empirically
+            3.999-4.002 at both test points) -- still 'small step' territory,
+            just not AT the precision-tuned default."
+    (doseq [[x M label] [[[0.0 3.0 4.0 0.0] 0.1 "A"] [[0.0 1.0 2.0 2.0] 0.05 "B"]]]
+      (let [h-field (schwarzschild-h-field M)
+            fd-hs [1.6e-2 8e-3 4e-3]
+            errs (mapv (fn [fdh] (Math/abs (double (gtg/curvature-scalar h-field x fdh fdh))))
+                       fd-hs)
+            [e0 e1 e2] errs
+            ratio1 (/ e0 e1)
+            ratio2 (/ e1 e2)]
+        (testing (str "point " label ": the errors are genuinely nonzero and monotonically "
+                      "shrinking as fd-h shrinks (e0=" e0 " e1=" e1 " e2=" e2 ")")
+          (is (> e0 0.0))
+          (is (> e0 e1) "error should shrink as fd-h halves (1.6e-2 -> 8e-3)")
+          (is (> e1 e2) "error should shrink as fd-h halves (8e-3 -> 4e-3)"))
+        (testing (str "point " label ": halving fd-h quarters the error (ratio ~4.0, "
+                      "not ~2.0 for first-order or ~8.0 for third-order convergence)")
+          (is (< 3.5 ratio1 4.5) (str "ratio e(1.6e-2)/e(8e-3) = " ratio1 " should be ~4.0"))
+          (is (< 3.5 ratio2 4.5) (str "ratio e(8e-3)/e(4e-3) = " ratio2 " should be ~4.0")))))))
+
+(deftest frame-adjoint-is-self-inverse-for-several-general-nondegenerate-matrices
+  (testing "frame-adjoint(frame-adjoint(f)) = f EXACTLY (bit-for-bit, not
+            merely close) for three concrete, non-degenerate (determinant !=
+            0, checked below), non-symmetric, non-Lorentz, non-Schwarzschild
+            4x4 matrices --
+            frame-adjoint-is-self-inverse-and-matches-known-schwarzschild-pair
+            above only exercises ONE Schwarzschild-hbar-derived matrix (plus
+            the identity); this generalizes the same SELF-INVERSE claim from
+            frame-adjoint's own docstring to several matrices with no
+            particular GTG-physics origin, confirming the algebraic identity
+            Fbarbar = eta@(eta@F@eta)^T@eta = eta@eta@F@eta@eta = F
+            (eta@eta=I) is not somehow special to the Schwarzschild pair the
+            existing test happens to use. The involution comes out bit-exact
+            here (not merely approximate) because frame-adjoint's formula
+            (eta @ f^T @ eta) involves only transposition and multiplication
+            by eta's +/-1/0 entries -- no division -- so applying it twice
+            introduces no rounding beyond f's own float representation
+            (independently confirmed while writing this test: max
+            elementwise |frame-adjoint(frame-adjoint(f)) - f| = 0.0 for all
+            three matrices below, not merely small)"
+    (doseq [f [[[1.5 -2.3 0.7 4.1]
+                [0.2 3.3 -1.8 0.5]
+                [-2.1 0.4 2.2 -0.9]
+                [1.1 -0.6 0.3 5.0]]
+               [[0.3 1.7 -0.4 2.2]
+                [-1.9 0.8 3.1 -0.5]
+                [2.4 -0.7 0.1 1.6]
+                [0.9 2.3 -1.2 0.4]]
+               [[2.0 0.5 -1.5 0.0]
+                [0.0 -3.0 0.2 1.0]
+                [1.0 1.0 1.0 1.0]
+                [-0.5 2.0 0.0 -2.0]]]]
+      (is (not (close? (tensor/mat-det f) 0.0))
+          (str "sanity: f is non-degenerate, det=" (tensor/mat-det f)))
+      (is (= f (gtg/frame-adjoint (gtg/frame-adjoint f)))
+          (str "frame-adjoint(frame-adjoint(f)) = f for f=" f)))))
+
+(deftest wedge-vectors-vanishes-for-zero-or-parallel-vectors
+  (testing "wedge-vectors(0, v) and wedge-vectors(v, 0) are exactly the zero
+            bivector, for a non-trivial v -- u^v=0 whenever u=0, an algebraic
+            special case of bilinearity not covered by
+            bivector-matrix-round-trip-and-wedge-vectors-antisymmetry above
+            (which only checks u^u=0 and u^v=-(v^u), both with a nonzero u)"
+    (let [zero4 [0.0 0.0 0.0 0.0]
+          v [1.0 2.0 -1.0 0.5]]
+      (is (every? #(= % 0.0) (gtg/wedge-vectors zero4 v)))
+      (is (every? #(= % 0.0) (gtg/wedge-vectors v zero4)))))
+  (testing "wedge-vectors(u, c*u) is exactly the zero bivector for a scalar
+            c != 1 -- two DISTINCT (not identical) but PARALLEL vectors span
+            no bivector, a genuinely different case than u^u=0 (the SAME
+            vector object passed twice)"
+    (let [u [1.0 2.0 -1.0 0.5]
+          v (mapv #(* 2.5 %) u)]
+      (is (not= u v) "sanity: u and v are distinct vectors, not the same value")
+      (is (every? #(= % 0.0) (gtg/wedge-vectors u v)))
+      (is (every? #(= % 0.0) (gtg/wedge-vectors v u))))))
+
+(deftest vector-dot-bivector-edge-cases
+  (testing "the zero vector dotted with any bivector is exactly the zero
+            vector (v.B is LINEAR in v)"
+    (let [zero4 [0.0 0.0 0.0 0.0]
+          B [0.1 -0.2 0.3 0.4 -0.5 0.6]]
+      (is (every? #(= % 0.0) (gtg/vector-dot-bivector zero4 B)))))
+  (testing "any vector dotted with the zero bivector is exactly the zero
+            vector (v.B is LINEAR in B)"
+    (let [v [1.0 2.0 -1.0 0.5]
+          zero6 (vec (repeat 6 0.0))]
+      (is (every? #(= % 0.0) (gtg/vector-dot-bivector v zero6)))))
+  (testing "a vector dotted with a bivector built from two vectors PARALLEL
+            to it is exactly zero -- not a new claim about vector-dot-bivector
+            itself, but confirms the zero bivector from
+            wedge-vectors-vanishes-for-zero-or-parallel-vectors propagates
+            correctly through vector-dot-bivector's own matrix-multiply
+            implementation"
+    (let [u [1.0 2.0 -1.0 0.5]
+          v (mapv #(* 2.5 %) u)]
+      (is (every? #(= % 0.0) (gtg/vector-dot-bivector u (gtg/wedge-vectors u v)))))))
+
+(deftest bivector-commutator-edge-cases
+  (testing "[B,B] = 0 for a concrete nonzero bivector B -- the Lie-bracket
+            antisymmetry [B1,B2]=-[B2,B1] (bivector-commutator-is-antisymmetric
+            above) forces this special case algebraically when B1=B2=B
+            ([B,B]=-[B,B] implies 2[B,B]=0), checked numerically here (to
+            floating tolerance, not asserted bit-exact, since
+            bivector-commutator sums 36 structure-constant/coefficient
+            products) rather than only argued for"
+    (let [f-abc (gtg/rotation-raw-structure-constants)
+          B [0.3 -0.2 0.1 0.5 -0.4 0.2]]
+      (doseq [k (range 6)]
+        (is (close? (nth (gtg/bivector-commutator f-abc B B) k) 0.0)
+            (str "[B,B][" k "]")))))
+  (testing "[B,0] = [0,B] = 0 for a concrete nonzero B -- the zero bivector
+            commutes trivially with everything"
+    (let [f-abc (gtg/rotation-raw-structure-constants)
+          B [0.3 -0.2 0.1 0.5 -0.4 0.2]
+          zero6 (vec (repeat 6 0.0))]
+      (is (every? #(close? % 0.0) (gtg/bivector-commutator f-abc B zero6)))
+      (is (every? #(close? % 0.0) (gtg/bivector-commutator f-abc zero6 B))))))
+
+(deftest outermorphism-of-the-identity-matrix-is-the-identity-map
+  (testing "outermorphism(I, B) = B EXACTLY for the 4x4 identity matrix and a
+            concrete nonzero bivector B -- I(u^v) = I(u)^I(v) = u^v for
+            every u,v, so the congruence transform I @ Bmat @ I^T reduces to
+            Bmat exactly, not merely approximately (no previous deftest in
+            this file exercises `outermorphism` directly -- it is otherwise
+            only reached indirectly, through H-field, on Schwarzschild-scale
+            floating-point values)"
+    (let [I4 [[1.0 0.0 0.0 0.0] [0.0 1.0 0.0 0.0] [0.0 0.0 1.0 0.0] [0.0 0.0 0.0 1.0]]
+          B [0.1 -0.2 0.3 0.4 -0.5 0.6]]
+      (is (= B (gtg/outermorphism I4 B)))))
+  (testing "outermorphism(I, 0) = 0"
+    (let [I4 [[1.0 0.0 0.0 0.0] [0.0 1.0 0.0 0.0] [0.0 0.0 1.0 0.0] [0.0 0.0 0.0 1.0]]
+          zero6 (vec (repeat 6 0.0))]
+      (is (every? #(= % 0.0) (gtg/outermorphism I4 zero6))))))
+
+(deftest riemann-map-antisymmetric-for-non-basis-bivectors-built-from-h-field-rows
+  (testing "R(h_a^h_b) = -R(h_b^h_a) for the position-gauge field's OWN rows
+            h_a = h-field(x)[a] -- riemann-basis-pair-antisymmetric-and-zero-on-diagonal
+            above already checks eq (4.48)'s antisymmetry in its two vector
+            arguments for the COORDINATE basis e_mu^e_nu via
+            `riemann-basis-pair`; this checks the SAME claimed property (that
+            docstring's derivation is stated for GENERAL a,b, not only basis
+            vectors) for the GENERAL (non-basis-pair) bivectors `riemann-map`
+            newly makes reachable, using EXACTLY the h_b^h_a construction
+            curvature-scalar's own formula uses (item 17's docstring) --
+            a non-trivial, position-dependent bivector, not merely a
+            restatement of the coordinate-basis check via a different
+            function name"
+    (let [x [0.0 3.0 4.0 0.0]
+          h-field (schwarzschild-h-field 0.1)
+          h-x (h-field x)]
+      (doseq [a (range 4) b (range 4) :when (not= a b)]
+        (let [R-ab (gtg/riemann-map h-field x (gtg/wedge-vectors (nth h-x a) (nth h-x b)))
+              R-ba (gtg/riemann-map h-field x (gtg/wedge-vectors (nth h-x b) (nth h-x a)))]
+          (doseq [k (range 6)]
+            (is (close-fd? (nth R-ab k) (- (nth R-ba k)) 1e-9)
+                (str "R(h_" a "^h_" b ")[" k "] = -R(h_" b "^h_" a ")[" k "]")))))))
+  (testing "R(h_a^h_a) = 0 EXACTLY for every a -- wedge-vectors(v,v) is
+            exactly the zero bivector (bivector-matrix-round-trip-and-
+            wedge-vectors-antisymmetry above), and riemann-map of the exact
+            zero bivector is exact-zero matrix-vector multiplication, so no
+            finite-difference tolerance is needed here"
+    (let [x [0.0 3.0 4.0 0.0]
+          h-field (schwarzschild-h-field 0.1)
+          h-x (h-field x)]
+      (doseq [a (range 4)]
+        (let [R-aa (gtg/riemann-map h-field x (gtg/wedge-vectors (nth h-x a) (nth h-x a)))]
+          (is (every? #(= % 0.0) R-aa) (str "R(h_" a "^h_" a ")")))))))
