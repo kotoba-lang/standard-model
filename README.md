@@ -434,27 +434,53 @@ Riemann map, and the true LDG Ricci scalar -- ADR-2607102300) adds:**
     own Schwarzschild vacuum solution at two independent test points/mass
     parameters -- the physically expected result (a vacuum solution has zero
     Ricci tensor, hence zero Ricci scalar as a direct special case) -- and
-    *exactly* `0.0` (not merely close) at the flat limit. This is the first
-    curvature-SCALAR result this namespace's whole Phase 0a-1 history
-    reaches, arrived at only because point 16 removed the specific,
-    previously-unverifiable index/sign step that blocked Phase 0c/0d/0e in
-    turn -- not by relaxing this namespace's verification discipline.
+    *exactly* `0.0` (not merely close) at the flat limit. **Also verified**:
+    `-4*Lambda`, within finite-difference tolerance, for LDG's own
+    **pure-de-Sitter cosmological solution** (section 6.6 "Cosmology",
+    Table 6/eq 6.169 at `rho=p=0`) at 3 independent (spatial point, `Lambda`)
+    combinations, run through the *same* h-field -> `omega-from-h` ->
+    `riemann-basis-pair` -> `curvature-scalar` pipeline end to end -- the
+    first genuinely *nonzero* curvature-scalar value this pipeline has been
+    checked against (Schwarzschild's `R=0` cannot by itself confirm a sign
+    or magnitude; this closes exactly that gap, left open by an earlier
+    docs-only investigation that confirmed the same sign convention only by
+    hand-building eq (6.169)'s Riemann operator in isolation, not by running
+    the real pipeline -- see `curvature-scalar`'s own ARGUMENT-ORDER
+    docstring section). This is the first curvature-SCALAR result this
+    namespace's whole Phase 0a-1 history reaches, arrived at only because
+    point 16 removed the specific, previously-unverifiable index/sign step
+    that blocked Phase 0c/0d/0e in turn -- not by relaxing this namespace's
+    verification discipline.
 
     **Phase 1 scope note**: `omega-from-h`/`curvature-scalar` implement ONLY
-    the VACUUM (source-free), SPIN-FREE closed-form solution (eq 4.53) --
-    not the general field equation with a matter/torsion source, not the
-    Einstein tensor/multivector, not the GTG action principle, and verified
-    against exactly ONE known exact solution (Schwarzschild), not a general
-    equivalence-to-GR proof.
+    the VACUUM (source-free, `T_ab=0`), SPIN-FREE closed-form solution
+    (eq 4.53) -- not the general field equation with a matter/torsion
+    source, not the Einstein tensor/multivector, not the GTG action
+    principle, and verified against exactly TWO known exact solutions:
+    Schwarzschild (`R=0`) and pure de Sitter (`T_ab=0`, `Lambda!=0`,
+    `R=-4*Lambda`) -- not a general equivalence-to-GR proof, and not a
+    confirmation that this closed form extends to matter-sourced
+    (`T_ab!=0`) cosmology: a nonzero-density (dust) extension was
+    investigated and **declined** -- `omega-from-h` faithfully reproduces
+    Table 6's own `omega(a)` for that case too, but the resulting
+    `curvature-scalar` did not match the independently-verified trace
+    identity, tracing to an unresolved vector.bivector contraction-order
+    ambiguity in eq (6.169)'s `(rho+p)` term (identically zero, and
+    therefore moot, for the pure-de-Sitter case landed here) -- reported
+    honestly as a follow-up rather than risked as a silently-wrong test.
 
 **Explicitly out of scope, not implemented here** (deliberately, deferred to
 a later phase if ever pursued): the Einstein tensor/multivector `G(a)`, the
 GTG action principle, the general (matter/torsion-sourced) field equation
 (only the vacuum/spin-free closed form (4.53) is implemented, point 15
 above), any proof of equivalence to General Relativity for *general* `h`
-(point 17's `curvature-scalar` is verified against exactly one known exact
-solution, not a general equivalence proof), and any dark-matter/dark-energy/
-de-Sitter extension. **Also out of scope**: a general (non-vacuum) combined
+(point 17's `curvature-scalar` is verified against exactly two known exact
+solutions, not a general equivalence proof), and any dark-matter/dark-energy
+(nonzero-matter-density, `T_ab!=0`) cosmological extension -- a *pure*
+vacuum-plus-cosmological-constant (`T_ab=0`, `Lambda!=0`, de Sitter) solution
+**is** now covered (see point 17 above); a genuine matter-coupled extension
+was investigated and declined, and remains out of scope. **Also out of
+scope**: a general (non-vacuum) combined
 `h_mu` + `Omega_mu` GTG covariant derivative with torsion -- Phase 0a's
 covariant derivative (5) still stands independently of the vacuum connection
 Phase 1 derives (it was built for a *supplied* `Omega_mu`, not the field-

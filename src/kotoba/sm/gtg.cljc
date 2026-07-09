@@ -16,16 +16,19 @@
   the rotation-gauge field equation given a position-gauge field h), the
   covariant Riemann map `riemann-map`/`riemann-map-matrix` (eq 4.48), and
   (having independently verified the pipeline against LDG's own Schwarzschild
-  solution to finite-difference precision, see gtg_test.cljc) the true LDG
+  solution, and (native regression test, not merely a docs-only sign-
+  convention investigation) LDG's own pure-de-Sitter cosmological solution,
+  both to finite-difference precision, see gtg_test.cljc) the true LDG
   Ricci SCALAR `curvature-scalar` that Phase 0c/0d/0e each investigated and
   each declined to implement. See this namespace's 'PHASE 1' section below
   for the full derivation and gtg_test.cljc for the Schwarzschild-solution
-  regression tests this phase is built and checked against. Phase 1 is
-  DELIBERATELY SCOPED to the VACUUM, SPIN-FREE field equation ONLY -- see
-  the PHASE 1 section's own scope note for exactly what remains out of
-  scope (matter/source coupling, the full field equation with torsion, the
-  Einstein tensor, the action principle, and any de Sitter/cosmological-
-  constant/dark-matter extension).
+  and FRW-cosmology regression tests this phase is built and checked
+  against. Phase 1 is DELIBERATELY SCOPED to the VACUUM, SPIN-FREE field
+  equation ONLY -- see the PHASE 1 section's own scope note for exactly what
+  remains out of scope (matter/source-coupled, i.e. T_ab != 0, cosmology --
+  a T_ab=0-plus-cosmological-constant, i.e. pure de Sitter, solution IS now
+  covered -- the full field equation with torsion, the Einstein tensor, and
+  the action principle).
 
   GTG's central observation (well known in the literature, not a new result
   of this namespace) is that the restricted Lorentz group SO(1,3)+ can be
@@ -407,18 +410,31 @@
     tensor/multivector G(a) (needed to couple to a general stress-energy
     tensor), NOT the GTG action principle (the Lagrangian this closed form
     is the EULER-LAGRANGE solution of is not derived or checked here), and
-    verified against exactly ONE known exact solution (Schwarzschild,
-    Painleve-Gullstrand/Newtonian gauge) -- NOT a general proof that this
-    namespace's pipeline reproduces GR for arbitrary h. See the EXPLICITLY
-    OUT OF SCOPE paragraph below for the full list still deferred.
+    verified against exactly TWO known exact solutions -- Schwarzschild
+    (Painleve-Gullstrand/Newtonian gauge, R=0) and, as of gtg_test.cljc's
+    `curvature-scalar-matches-minus-4-lambda-for-pure-de-sitter-cosmology`,
+    LDG's pure-de-Sitter cosmological solution (section 6.6 'Cosmology',
+    Table 6/eq 6.169 at rho=p=0, R=-4*Lambda -- still T_ab=0, so still
+    squarely within this VACUUM scope, just with Lambda != 0) -- NOT a
+    general proof that this namespace's pipeline reproduces GR for arbitrary
+    h, and NOT (a nonzero-density, e.g. dust, extension was investigated and
+    declined -- see that test file section's header comment) a confirmation
+    that this closed form extends correctly to matter-sourced (T_ab != 0)
+    cosmological solutions. See the EXPLICITLY OUT OF SCOPE paragraph below
+    for the full list still deferred.
 
   EXPLICITLY OUT OF SCOPE, NOT IMPLEMENTED HERE (Phase 0a+0b+0c+0d+0e+1):
   the Einstein tensor/multivector G(a), the GTG action principle, the general
   (matter/torsion-sourced) field equation (only the vacuum/spin-free closed
   form (4.53) is implemented, item 15 above), any proof of equivalence to
   General Relativity for GENERAL h (item 17's `curvature-scalar` is verified
-  against exactly one known exact solution, not a general equivalence proof),
-  and any dark-matter/dark-energy/de-Sitter extension. ALSO OUT OF SCOPE: a
+  against exactly two known exact solutions, not a general equivalence
+  proof), and any dark-matter/dark-energy (nonzero-matter-density,
+  T_ab != 0) cosmological extension -- a PURE vacuum-plus-cosmological-
+  constant (T_ab=0, Lambda != 0, de Sitter) solution IS now covered (see the
+  PHASE 1 SCOPE NOTE just above and gtg_test.cljc's FRW-cosmology section);
+  a genuine matter-coupled (T_ab != 0) extension was investigated and
+  declined, and remains out of scope. ALSO OUT OF SCOPE: a
   general (non-vacuum) combined h_mu+Omega_mu GTG covariant derivative with
   torsion -- Phase 0a's covariant derivative (5) still stands independently
   of the vacuum connection Phase 1 derives (5) was built for a SUPPLIED
@@ -1578,15 +1594,31 @@
   Kosowsky gr-qc/0311007 eq (2.26)/(2.29). This upgrades the sign convention
   from 'algebraically re-derived only' (as an earlier version of this
   docstring said) to numerically confirmed against a non-trivial published
-  closed-form solution. This confirmation was done in a standalone scratch
-  script (Python, reusing the `ga_algebra.py` reference engine already used
-  to validate the Schwarzschild pipeline), NOT yet as a `kotoba.sm.gtg`-native
-  regression test -- porting the FRW/cosmology h-field itself into this
-  codebase (Table 6's h-bar, including pinning down whether its 'a.e_r' uses
-  the same Euclidean-not-Minkowski dot convention Schwarzschild's eq (6.79)
-  turned out to use, re-verified from PDF page images rather than assumed by
-  analogy) is tracked as separate follow-up work, kept out of this docstring
-  update to avoid asserting a landed test that does not yet exist here.
+  closed-form solution. This confirmation was originally done in a
+  standalone scratch script (Python, reusing the `ga_algebra.py` reference
+  engine already used to validate the Schwarzschild pipeline) that hand-built
+  eq (6.169)'s Riemann OPERATOR in isolation and fed it through the SAME
+  outer double-contraction this function performs -- it did NOT run this
+  namespace's actual h-field -> `omega-from-h` -> `riemann-basis-pair` ->
+  `curvature-scalar` finite-difference PIPELINE end to end (Schwarzschild is
+  the only case that exercises the real pipeline, and Schwarzschild has R=0
+  identically, so it cannot itself confirm a sign). THIS GAP IS NOW CLOSED:
+  gtg_test.cljc's `curvature-scalar-matches-minus-4-lambda-for-pure-de-
+  sitter-cosmology` ports the k=0 (spatially flat), rho=p=0, Lambda>0 special
+  case of Table 6 (a PURE DE SITTER solution -- T_ab=0, so it is a genuine
+  instance of this function's already-documented VACUUM scope, not an
+  extension beyond it) into a native h-field and runs it through the REAL
+  pipeline, confirming R=-4*Lambda at 3 independent (spatial point, Lambda)
+  combinations to finite-difference precision (see that deftest's own
+  docstring for the closed-form re-derivation and the Euclidean-vs-Minkowski
+  'a.e_r' convention confirmation, independently re-verified from PDF page
+  images, same discipline as `schwarzschild-hbar`'s own convention note). A
+  genuine nonzero-DENSITY extension (T_ab != 0, e.g. dust) was investigated
+  but declined -- see that same test file section's header comment for the
+  specific, honestly-reported reason (an unresolved vector.bivector
+  contraction-order question in eq (6.169)'s (rho+p) term, which is
+  identically zero and therefore moot for the pure-de-Sitter case landed
+  here) -- so matter-coupled cosmology remains unverified and out of scope.
 
   VERIFIED (gtg_test.cljc): 0.0, within finite-difference-truncation
   tolerance, for LDG's own Schwarzschild vacuum solution (eq 6.79) at
@@ -1597,8 +1629,14 @@
   the buggy version's scalar-only check could not distinguish from the true
   answer (the buggy version's spurious ~1e-4 asymmetric components were
   ~2000x above this noise floor, not explainable as truncation error).
-  EXACTLY 0.0 (not merely close) at the flat limit h=`position-gauge-identity`,
-  where every derivative this pipeline computes vanishes identically rather
+  ALSO VERIFIED: -4*Lambda, within finite-difference-truncation tolerance,
+  for LDG's own pure-de-Sitter cosmological solution (Table 6/eq 6.169 at
+  rho=p=0) at 3 independent (spatial point, Lambda) combinations -- the
+  first NONZERO curvature-scalar value this namespace's pipeline has been
+  checked against end to end (Schwarzschild's R=0 cannot itself confirm a
+  sign or a nonzero magnitude). EXACTLY 0.0 (not merely close) at the flat
+  limit h=`position-gauge-identity`, where every derivative this pipeline
+  computes vanishes identically rather
   than merely numerically.
 
   This is the first curvature-SCALAR result this namespace's Phase 0a
@@ -1608,8 +1646,9 @@
   investigation each independently declined to implement this exact formula
   for the same, now-resolved, reason. Reached here only because `riemann-map`
   removed that specific blocker, not by relaxing this namespace's
-  verification discipline (a Schwarzschild-solution regression test, not a
-  bare assertion, backs this function -- see gtg_test.cljc)."
+  verification discipline (Schwarzschild-solution AND de-Sitter-cosmology
+  regression tests, not a bare assertion, back this function -- see
+  gtg_test.cljc)."
   ([h-field x] (curvature-scalar h-field x default-fd-h default-fd-h))
   ([h-field x fd-h-inner fd-h-outer]
    (reduce +
