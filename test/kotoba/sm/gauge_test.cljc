@@ -1,6 +1,7 @@
 (ns kotoba.sm.gauge-test
   (:require [clojure.test :refer [deftest is testing]]
             [kotoba.sm.complex :as c]
+            [kotoba.sm.spinor :as spinor]
             [kotoba.sm.gauge :as g]))
 
 (defn- close? [a b] (< (Math/abs (double (- a b))) 1e-6))
@@ -75,6 +76,32 @@
       (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
                     (g/structure-constants [I I]))))))
 
+(deftest diagonal-gram-degenerate-diagonal-throws
+  (testing "a generator whose own trace-square is ~0 -- a null/degenerate direction under the
+            trace pairing, e.g. the nilpotent 2x2 matrix N=[[0,1],[0,0]] with N^2=0 (so
+            Tr(N N)=0) -- makes the trace-Gram matrix DIAGONAL (trivially so for a single-generator
+            basis, so this does NOT hit the non-diagonal-gram-throws case above) but with a ~0
+            diagonal entry; structure-constants must throw rather than silently divide by ~0 in
+            f^{ABD} = -i Tr([T_A,T_B]T_D) / K[D][D]"
+    (let [N [[c/zero c/one] [c/zero c/zero]]]
+      (is (c/approx= (c/m-trace (c/m-mul N N)) c/zero) "sanity: N is nilpotent, Tr(N N)=0")
+      (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
+                    (g/structure-constants [N]))))))
+
+(deftest non-orthogonal-pauli-linear-combination-throws
+  (testing "a genuinely non-orthogonal (not merely duplicated) 2-generator basis built by taking a
+            NON-TRIVIAL LINEAR COMBINATION of Pauli matrices: T0=sigma1, T1=sigma1+sigma2. Unlike
+            the existing [I I] regression case above (two IDENTICAL generators), T0 and T1 here are
+            distinct matrices that are still not trace-orthogonal -- Tr(T0 T1) =
+            Tr(sigma1(sigma1+sigma2)) = Tr(sigma1^2) + Tr(sigma1 sigma2) = Tr(I) + 0 = 2 != 0 --
+            so structure-constants must throw on this basis too"
+    (let [T0 spinor/sigma1
+          T1 (c/m-add spinor/sigma1 spinor/sigma2)]
+      (is (c/approx= (c/m-trace (c/m-mul T0 T1)) (c/c 2 0))
+          "sanity: Tr(T0 T1) is nonzero -- T0,T1 are not trace-orthogonal")
+      (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
+                    (g/structure-constants [T0 T1]))))))
+
 (deftest su2-structure-constants
   (testing "f^123 = epsilon^123 = 1 for SU(2) (0-indexed: f[0][1][2])"
     (let [f (g/structure-constants g/su2-generators)]
@@ -105,6 +132,71 @@
           d-psi [(c/c 0.1 0) (c/c 0 0.2)]
           D (g/covariant-derivative d-psi g/su2-generators [0.0 0.0 0.0] 1.0 psi)]
       (is (c/v-approx= D d-psi)))))
+
+(deftest covariant-derivative-is-linear-in-psi
+  (testing "additivity: D_mu(psi1+psi2) = D_mu(psi1) + D_mu(psi2), for concrete nonzero SU(2)
+            gauge-field/coupling and two distinct nonzero (d-mu-psi,psi) pairs -- the pairing
+            (d-mu-psi1+d-mu-psi2, psi1+psi2) must be fed in together since covariant-derivative
+            takes both as arguments"
+    (let [Ts g/su2-generators
+          A-mu [0.4 -0.3 0.7]
+          gcoup 1.5
+          d-psi1 [(c/c 0.1 0.2) (c/c -0.3 0.1)]
+          psi1 [(c/c 1 0) (c/c 0 1)]
+          d-psi2 [(c/c 0.05 -0.1) (c/c 0.2 0)]
+          psi2 [(c/c 0.5 0.5) (c/c -1 0.3)]
+          D1 (g/covariant-derivative d-psi1 Ts A-mu gcoup psi1)
+          D2 (g/covariant-derivative d-psi2 Ts A-mu gcoup psi2)
+          Dsum (g/covariant-derivative (c/v-add d-psi1 d-psi2) Ts A-mu gcoup (c/v-add psi1 psi2))]
+      (is (c/v-approx= Dsum (c/v-add D1 D2) 1e-9))))
+  (testing "homogeneity: D_mu(c*psi) = c*D_mu(psi) for a complex scalar c, for concrete nonzero
+            SU(3) gauge-field/coupling -- since covariant-derivative takes (d-mu-psi,psi) as a
+            pair, 'c*psi' as an input means BOTH arguments scale by c (the ordinary derivative of
+            c*psi is c times the ordinary derivative of psi, c being a constant)"
+    (let [Ts g/su3-generators
+          A-mu [0.2 -0.1 0.3 0.0 0.5 -0.4 0.1 0.2]
+          gcoup 0.8
+          d-psi [(c/c 0.1 0) (c/c 0 0.2) (c/c -0.1 0.1)]
+          psi [(c/c 1 0) (c/c 0 -1) (c/c 0.5 0)]
+          coeff (c/c 2 -3)
+          D (g/covariant-derivative d-psi Ts A-mu gcoup psi)
+          cD (c/v-scale coeff D)
+          D-scaled (g/covariant-derivative (c/v-scale coeff d-psi) Ts A-mu gcoup (c/v-scale coeff psi))]
+      (is (c/v-approx= D-scaled cD 1e-9)))))
+
+(deftest field-strength-antisymmetric-under-mu-nu-swap
+  (testing "SU(2): F_mu-nu^a = -F_nu-mu^a for concrete, non-random NONZERO d-A (curl term) AND
+            NONZERO A (so the self-interaction term g f^abc A_mu^b A_nu^c is also genuinely
+            exercised, not vacuously zero) -- checked for every (mu,nu) pair, not just one"
+    (let [f (g/structure-constants g/su2-generators)
+          zero3 (vec (repeat 3 0.0))
+          d-A (-> (vec (repeat 4 (vec (repeat 4 zero3))))
+                  (assoc-in [0 1] [1.0 0.5 -0.3])
+                  (assoc-in [1 0] [0.2 -0.4 0.1])
+                  (assoc-in [2 3] [0.7 0.0 0.9])
+                  (assoc-in [3 2] [-0.6 0.3 0.2]))
+          A [[0.3 0.1 -0.2] [0.5 0.4 0.0] [0.0 0.6 -0.1] [0.2 0.2 0.2]]
+          F (g/field-strength f 1.0 d-A A)]
+      (doseq [mu (range 4) nu (range 4) a (range 3)]
+        (is (close? (get-in F [mu nu a]) (- (get-in F [nu mu a])))
+            (str "F[" mu "][" nu "][" a "] = -F[" nu "][" mu "][" a "]")))
+      (testing "sanity: the self-interaction term is genuinely nonzero somewhere (not a vacuous
+                curl-only check)"
+        (is (some #(> (Math/abs (double %)) 1e-9)
+                  (for [mu (range 4) nu (range 4) a (range 3)
+                        :let [curl (- (get-in d-A [mu nu a]) (get-in d-A [nu mu a]))]]
+                    (- (get-in F [mu nu a]) curl)))))))
+  (testing "SU(3): same check, with nonzero d-A and A spread across multiple of the 8 generators"
+    (let [f (g/structure-constants g/su3-generators)
+          zero8 (vec (repeat 8 0.0))
+          d-A (-> (vec (repeat 4 (vec (repeat 4 zero8))))
+                  (assoc-in [0 1] (assoc zero8 0 1.0 3 0.5))
+                  (assoc-in [1 0] (assoc zero8 0 0.2 4 -0.4)))
+          A (vec (repeat 4 (assoc zero8 0 0.3 3 0.7 5 -0.2)))
+          F (g/field-strength f 1.0 d-A A)]
+      (doseq [mu (range 4) nu (range 4) a (range 8)]
+        (is (close? (get-in F [mu nu a]) (- (get-in F [nu mu a])))
+            (str "F[" mu "][" nu "][" a "] = -F[" nu "][" mu "][" a "]"))))))
 
 (deftest u1-field-strength-is-ordinary-em-tensor
   (testing "for abelian U(1), F_mu-nu = d_mu A_nu - d_nu A_mu (no self-interaction term)"
