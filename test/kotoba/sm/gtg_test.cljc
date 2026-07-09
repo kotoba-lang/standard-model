@@ -2,11 +2,19 @@
   "Tests for the GTG (Lasenby-Doran-Gull 1998) rotation-gauge sector, Phase
   0a -- see kotoba.sm.gtg's namespace docstring for the exact scope. The
   `trace-normalization-*` tests below are the load-bearing ones: they record,
-  numerically, that kotoba.sm.gauge's compact-group trace normalization
-  Tr(T^aT^b)=1/2delta^ab does NOT hold for the noncompact so(1,3) bivector
-  generators, and exactly how kotoba.sm.gauge/structure-constants's raw
-  output diverges from the genuine so(1,3) structure constants as a result.
-  These numbers are recorded honestly, not massaged to force agreement."
+  numerically, that kotoba.sm.gauge's (Phase-0a-era, compact-group-only)
+  trace normalization Tr(T^aT^b)=1/2delta^ab does NOT hold for the noncompact
+  so(1,3) bivector generators.
+
+  `structure-constants-now-match-genuine-values-after-gauge-fix` (formerly
+  `raw-structure-constants-diverge-from-genuine-ones`, see that deftest's own
+  docstring for the before/after) records the CONSEQUENCE of that fact as it
+  stood at Phase 0a time: `kotoba.sm.gauge/structure-constants`'s raw output
+  used to diverge from the genuine so(1,3) structure constants. That has
+  SINCE BEEN FIXED by generalizing `kotoba.sm.gauge/structure-constants` to
+  compute its own generator set's trace-Gram matrix instead of assuming it is
+  1/2delta^AB -- so raw and genuine now MATCH. These numbers are recorded
+  honestly either way, not massaged to force agreement."
   (:require [clojure.test :refer [deftest is testing]]
             [kotoba.sm.complex :as c]
             [kotoba.sm.spinor :as spinor]
@@ -76,43 +84,59 @@
       (doseq [A (range 6)]
         (is (close? (Math/abs (double (get-in K [A A]))) 1.0))))))
 
-(deftest raw-structure-constants-diverge-from-genuine-ones
-  (testing "kotoba.sm.gauge/structure-constants applied as-is to these generators gives
-            f-raw[A][B][C] = 2*K[C][C]*f-true[A][B][C] -- i.e. a uniform +2 factor when C is a
-            rotation-type generator, and a WRONG-SIGNED -2 factor when C is boost-type"
+(deftest structure-constants-now-match-genuine-values-after-gauge-fix
+  "BEFORE/AFTER: this deftest used to be named
+  `raw-structure-constants-diverge-from-genuine-ones` and asserted the
+  OPPOSITE of what it asserts now. At Phase 0a time,
+  `kotoba.sm.gauge/structure-constants` hard-coded the compact-group
+  assumption Tr(T^aT^b)=1/2delta^ab, so its raw output for this so(1,3)
+  generator set (`rotation-raw-structure-constants`) was f-raw[A][B][C] =
+  2*K[C][C]*f-true[A][B][C] -- a uniform +2 factor when C is a rotation-type
+  generator, and a WRONG-SIGNED -2 factor when C is boost-type -- and never
+  literally equaled the genuine values `true-structure-constants` for any
+  nonzero triple. `kotoba.sm.gauge/structure-constants` has SINCE BEEN FIXED
+  to compute its own generator set's trace-Gram matrix K[A][B]=Tr(T_AT_B)
+  instead of assuming it is 1/2delta^AB (see the `kotoba.sm.gauge` namespace
+  docstring), so raw and true now MATCH -- the assertions below are the same
+  shape as the old ones, with `not (close? ...)` flipped to `close? ...`, so
+  the diff against the old test makes the before/after explicit."
+  (testing "kotoba.sm.gauge/structure-constants applied to these generators now gives
+            f-raw[A][B][C] = f-true[A][B][C] exactly (within floating tolerance) for
+            every triple -- the fix eliminated the old 2*K[C][C] divergence entirely"
     (let [f-raw (gtg/rotation-raw-structure-constants)
-          f-true (gtg/true-structure-constants)
-          K (gtg/generator-trace-gram)]
+          f-true (gtg/true-structure-constants)]
       (doseq [A (range 6) B (range 6) C (range 6)]
-        (is (close? (get-in f-raw [A B C])
-                     (* 2 (get-in K [C C]) (get-in f-true [A B C])))
-            (str "f-raw[" A "][" B "][" C "] vs 2*K[C][C]*f-true")))))
-  (testing "concretely: [T^{01},T^{12}] has genuine coefficient -1 on T^{02} (basis index 1), but
-            kotoba.sm.gauge/structure-constants's raw output for that same triple is +2 -- both
-            the magnitude (2x) and the SIGN are wrong, because T^{02} is boost-type (K=-1)"
-    (let [f-raw (gtg/rotation-raw-structure-constants)
-          f-true (gtg/true-structure-constants)]
-      (is (close? (get-in f-true [0 3 1]) -1.0))
-      (is (close? (get-in f-raw [0 3 1]) 2.0))
-      (is (not (close? (get-in f-raw [0 3 1]) (get-in f-true [0 3 1]))))))
-  (testing "by contrast, for a rotation-type third index the raw output has the right SIGN, just
-            2x the genuine magnitude: [T^{12},T^{13}] on T^{23} (basis index 5)"
-    (let [f-raw (gtg/rotation-raw-structure-constants)
-          f-true (gtg/true-structure-constants)]
-      (is (close? (get-in f-true [3 4 5]) 1.0))
-      (is (close? (get-in f-raw [3 4 5]) 2.0))))
-  (testing "raw structure constants never literally equal the genuine ones for any nonzero triple
-            (the naive Tr=1/2delta reuse is not merely off by a global constant that could be
-            divided out -- the boost/rotation sign split makes it structurally wrong)"
+        (is (close? (get-in f-raw [A B C]) (get-in f-true [A B C]))
+            (str "f-raw[" A "][" B "][" C "] vs f-true")))))
+  (testing "and, as a check that the fix isn't accidentally satisfying the OLD (broken)
+            2*K[C][C] relationship too (which would only be possible if 2*K[C][C]=1, false for
+            every K[C][C]=+/-1 in this generator set), raw no longer equals the historically
+            broken value the old hard-coded -2i formula used to produce, for any nonzero triple"
     (let [f-raw (gtg/rotation-raw-structure-constants)
           f-true (gtg/true-structure-constants)
+          K (gtg/generator-trace-gram)
           nonzero-triples (for [A (range 6) B (range 6) C (range 6)
                                  :when (> (Math/abs (double (get-in f-true [A B C]))) 1e-9)]
                              [A B C])]
       (is (= 24 (count nonzero-triples)))
       (doseq [[A B C] nonzero-triples]
-        (is (not (close? (get-in f-raw [A B C]) (get-in f-true [A B C])))
-            (str "[" A " " B " " C "] raw should NOT equal true"))))))
+        (let [old-broken-value (* 2 (get-in K [C C]) (get-in f-true [A B C]))]
+          (is (not (close? (get-in f-raw [A B C]) old-broken-value))
+              (str "[" A " " B " " C "] raw should NOT equal the pre-fix 2*K[C][C]*f-true value"))))))
+  (testing "concretely: [T^{01},T^{12}] has genuine coefficient -1 on T^{02} (basis index 1); the
+            raw output for that same triple is now -1 too (Phase 0a: it used to be the
+            wrong-signed +2, since T^{02} is boost-type, K=-1)"
+    (let [f-raw (gtg/rotation-raw-structure-constants)
+          f-true (gtg/true-structure-constants)]
+      (is (close? (get-in f-true [0 3 1]) -1.0))
+      (is (close? (get-in f-raw [0 3 1]) -1.0))
+      (is (close? (get-in f-raw [0 3 1]) (get-in f-true [0 3 1])))))
+  (testing "and for a rotation-type third index: [T^{12},T^{13}] on T^{23} (basis index 5) -- raw
+            is now +1, matching true (Phase 0a: it used to be +2, right sign but 2x magnitude)"
+    (let [f-raw (gtg/rotation-raw-structure-constants)
+          f-true (gtg/true-structure-constants)]
+      (is (close? (get-in f-true [3 4 5]) 1.0))
+      (is (close? (get-in f-raw [3 4 5]) 1.0)))))
 
 ;; ---------------------------------------------------------------------------
 ;; 4. rotation gauge field Omega_mu and its field strength R_mu-nu, via

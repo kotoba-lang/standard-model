@@ -1,29 +1,127 @@
 (ns kotoba.sm.gauge
-  "Generic compact-Lie-algebra layer: generator sets for U(1)/SU(2)/SU(3),
-  structure constants derived generically (not hard-coded) from any Hermitian
-  generator set normalized Tr(T^a T^b) = 1/2 delta^ab (the standard convention
-  for the Pauli/2 and Gell-Mann/2 generators used here), the gauge covariant
-  derivative, and the non-abelian Yang-Mills field-strength tensor."
+  "Generic Lie-algebra layer: generator sets for U(1)/SU(2)/SU(3) (compact),
+  and -- via `kotoba.sm.gtg` -- the noncompact so(1,3) rotation-gauge sector,
+  structure constants derived generically (not hard-coded) from ANY generator
+  set whose own trace-Gram matrix K[A][B] = Tr(T_A T_B) is diagonal (see
+  `structure-constants` below for the exact formula and scope), the gauge
+  covariant derivative, and the non-abelian Yang-Mills field-strength tensor.
+
+  Historically `structure-constants` hard-coded the compact-group convention
+  Tr(T^aT^b) = 1/2 delta^ab (Pauli/2 for SU(2), Gell-Mann/2 for SU(3)) into
+  its formula, f^abc = -2i Tr([T^a,T^b]T^c). That formula is only correct
+  under that specific normalization -- it silently gives WRONG values (both
+  wrong magnitude and, for indefinite-signature generator sets, wrong sign)
+  for any generator set whose Gram matrix isn't a uniform +1/2 on the
+  diagonal, e.g. so(1,3)'s noncompact bivector generators (`kotoba.sm.gtg`),
+  whose Gram matrix is diagonal but +1 (rotation-type) or -1 (boost-type).
+  `structure-constants` now computes the Gram matrix from the generators
+  themselves and uses it in the formula, so it is correct for both cases (and
+  numerically IDENTICAL to the old hard-coded formula in the compact-group
+  case -- see gauge_test.cljc's `structure-constants-matches-legacy-*`
+  regression tests)."
   (:require [kotoba.sm.complex :as c]
             [kotoba.sm.spinor :as spinor]))
 
 ;; ---------------------------------------------------------------------------
-;; structure constants — generic: f^abc = -2i Tr([T^a,T^b] T^c)
-;; (derivation: [T^a,T^b] = i f^abc T^c; trace both sides against T^d using
-;;  Tr(T^cT^d) = 1/2 delta^cd  =>  Tr([T^a,T^b]T^d) = (i/2) f^abd)
+;; structure constants — generic: f^{ABD} = -i Tr([T_A,T_B]T_D) / K[D][D],
+;; where K[A][B] = Tr(T_A T_B) is the generator set's OWN trace-Gram matrix
+;; (not assumed to be 1/2 delta^AB).
+;;
+;; Derivation: [T_A,T_B] = i f^{ABC} T_C (sum over C); trace both sides
+;; against T_D:
+;;   Tr([T_A,T_B]T_D) = i f^{ABC} Tr(T_C T_D) = i f^{ABC} K[C][D]   (sum C)
+;; If (and only if) K is DIAGONAL, K[C][D] = K[D][D] delta_{CD}, so the sum
+;; over C collapses to the single C=D term:
+;;   Tr([T_A,T_B]T_D) = i f^{ABD} K[D][D]  =>  f^{ABD} = -i Tr([T_A,T_B]T_D) / K[D][D]
+;;
+;; SCOPE: only a diagonal K is handled (checked below; throws otherwise). A
+;; non-diagonal K would need the full f^{ABC} = -i Tr([T_A,T_B]T_E) (K^-1)[E][C]
+;; contracted against a general matrix inverse, which is NOT implemented here
+;; -- deliberately deferred, since every generator set actually used in this
+;; codebase (U(1); SU(2) Pauli/2; SU(3) Gell-Mann/2; so(1,3)'s 6 bivector
+;; generators, `kotoba.sm.gtg`) has a diagonal K, so this is not a practical
+;; limitation today. Left as a documented future-work boundary, not silently
+;; assumed away.
+;;
+;; The historical special case Tr(T^aT^b) = 1/2 delta^ab (Pauli/2, Gell-Mann/2)
+;; has K[D][D] = 1/2 uniformly, for which -i/K[D][D] = -i/(1/2) = -2i, so this
+;; reduces EXACTLY to the old hard-coded f^abc = -2i Tr([T^a,T^b]T^c) formula
+;; -- gauge_test.cljc's `structure-constants-matches-legacy-*` tests prove
+;; this bit-for-bit (within floating tolerance) against an independent
+;; re-implementation of that old formula, on top of the pre-existing textbook
+;; -value regression tests (`su2-structure-constants`/`su3-structure-constants`).
 ;; ---------------------------------------------------------------------------
 
-(defn structure-constants
-  "f[a][b][cc] for a Hermitian generator set normalized Tr(T^aT^b)=1/2 delta^ab."
+(defn generator-gram
+  "K[A][B] = Tr(T_A T_B) for a generator set, as raw complex scalars.
+  `structure-constants` below uses only the real part (`diagonal-gram-real`);
+  callers that want to double-check the imaginary part is numerically ~0 --
+  which it always is, for every generator set actually used in this
+  codebase -- can inspect these raw complex values directly (gauge_test.cljc
+  and kotoba.sm.gtg-test both do exactly that)."
   [generators]
-  (let [n (count generators)]
-    (vec (for [a (range n)]
-           (vec (for [b (range n)]
-                  (vec (for [cc (range n)]
-                         (let [comm (c/m-commutator (nth generators a) (nth generators b))
-                               prod (c/m-mul comm (nth generators cc))
-                               tr (c/m-trace prod)]
-                           (c/re (c/c* (c/c 0 -2) tr)))))))))))
+  (vec (for [A generators]
+         (vec (for [B generators]
+                (c/m-trace (c/m-mul A B)))))))
+
+(defn diagonal-gram-real
+  "Real part of `generator-gram`, AFTER checking it is actually diagonal
+  (off-diagonal entries ~0, within `eps`) and has no ~0 diagonal entry (a
+  degenerate/null direction under the trace pairing, which would make the
+  f^{ABD} formula divide by ~0). Throws `ex-info` otherwise -- `structure-
+  constants` only implements the diagonal, non-degenerate case (see the
+  namespace-level SCOPE note above)."
+  [generators eps]
+  (let [n (count generators)
+        K (generator-gram generators)
+        Kre (mapv (fn [row] (mapv c/re row)) K)]
+    (doseq [A (range n) B (range n) :when (not= A B)]
+      (let [v (get-in Kre [A B])]
+        (when (> (Math/abs (double v)) eps)
+          (throw (ex-info
+                  (str "kotoba.sm.gauge/structure-constants: generator trace-Gram "
+                       "matrix K[A][B]=Tr(T_A T_B) is not diagonal (K[" A "][" B "] = "
+                       v "); this generalization only supports diagonal Gram "
+                       "matrices (orthogonal generator bases) -- non-orthogonal bases "
+                       "are out of scope, see the kotoba.sm.gauge namespace docstring.")
+                  {:kotoba.sm.gauge/reason :non-diagonal-gram :A A :B B :value v :K Kre})))))
+    (doseq [D (range n)]
+      (let [v (get-in Kre [D D])]
+        (when (<= (Math/abs (double v)) eps)
+          (throw (ex-info
+                  (str "kotoba.sm.gauge/structure-constants: generator trace-Gram "
+                       "matrix K[A][B]=Tr(T_A T_B) has a ~0 diagonal entry (K[" D "][" D "] = "
+                       v "), a degenerate/null generator under the trace pairing -- "
+                       "f^{ABD} = -i Tr([T_A,T_B]T_D)/K[D][D] is undefined for this D.")
+                  {:kotoba.sm.gauge/reason :degenerate-gram-diagonal :D D :value v :K Kre})))))
+    Kre))
+
+(defn structure-constants
+  "f[A][B][D] for ANY generator set whose own trace-Gram matrix
+  K[A][B]=Tr(T_A T_B) is diagonal (checked via `diagonal-gram-real`, which
+  throws if not -- see the namespace-level SCOPE note). Does NOT assume
+  Tr(T^aT^b)=1/2delta^ab; it computes K from the generators themselves.
+
+  f^{ABD} = -i Tr([T_A,T_B]T_D) / K[D][D].
+
+  For the historical Tr(T^aT^b)=1/2delta^ab convention (Pauli/2, Gell-Mann/2)
+  this is numerically identical to the old hard-coded f^{abc} =
+  -2i Tr([T^a,T^b]T^c) formula -- see gauge_test.cljc for the regression
+  proof (both against textbook values AND against a re-implementation of the
+  old formula itself)."
+  ([generators] (structure-constants generators 1e-9))
+  ([generators eps]
+   (let [n (count generators)
+         K (diagonal-gram-real generators eps)]
+     (vec (for [a (range n)]
+            (vec (for [b (range n)]
+                   (vec (for [d (range n)]
+                          (let [comm (c/m-commutator (nth generators a) (nth generators b))
+                                prod (c/m-mul comm (nth generators d))
+                                tr (c/m-trace prod)
+                                Kdd (get-in K [d d])
+                                coeff (c/c 0 (- (/ 1.0 Kdd)))]
+                            (c/re (c/c* coeff tr))))))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; U(1) — abelian hypercharge/electric-charge generator

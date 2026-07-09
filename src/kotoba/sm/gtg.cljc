@@ -20,12 +20,29 @@
     2. a numeric check (in gtg_test.cljc) that these six generators close the
        Lorentz Lie algebra: [T^{ab},T^{cd}] = i(eta^{bc}T^{ad} - eta^{ac}T^{bd}
        - eta^{bd}T^{ac} + eta^{ad}T^{bc}) (`lorentz-algebra-rhs`).
-    3. an HONEST numeric check of whether `kotoba.sm.gauge`'s compact-group
-       trace normalization Tr(T^aT^b) = 1/2 delta^ab carries over to this
-       noncompact generator set. IT DOES NOT -- see `generator-trace-gram`,
-       `true-structure-constants`, `compact-group-trace-normalization-holds?`
-       and gtg_test.cljc for the actual numbers and the honest failure mode
-       this produces in `kotoba.sm.gauge/structure-constants`'s raw output.
+    3. an HONEST numeric check of whether `kotoba.sm.gauge`'s (as of Phase 0a)
+       compact-group trace normalization Tr(T^aT^b) = 1/2 delta^ab carries
+       over to this noncompact generator set. IT DID NOT -- see
+       `generator-trace-gram`, `true-structure-constants`,
+       `compact-group-trace-normalization-holds?` and gtg_test.cljc for the
+       actual numbers and the failure mode this Phase 0a check exposed in
+       `kotoba.sm.gauge/structure-constants`'s output (a factor of 2*K[C][C]
+       off, wrong SIGN for boost-type indices). THIS HAS SINCE BEEN FIXED:
+       `kotoba.sm.gauge/structure-constants` was generalized (post-Phase-0a)
+       to compute its own generator set's trace-Gram matrix K[A][B]=Tr(T_AT_B)
+       instead of assuming it is 1/2delta^AB, so it is no longer restricted to
+       the compact-group normalization and its output for this so(1,3)
+       generator set is now the GENUINE structure constants -- see
+       `rotation-raw-structure-constants` and gtg_test.cljc's
+       `structure-constants-now-match-genuine-values-after-gauge-fix` (the
+       renamed/inverted former `raw-structure-constants-diverge-from-genuine-ones`).
+       This section's functions (`generator-trace-gram`, `true-structure-constants`,
+       `compact-group-trace-normalization-holds?`, `basis-projection`) are KEPT as
+       an independent derivation of the genuine structure constants and a live,
+       re-checkable record of WHY Tr(T^aT^b)=1/2delta^ab fails to hold for a
+       noncompact generator set -- useful documentation and cross-check value
+       even though `kotoba.sm.gauge/structure-constants` no longer needs the
+       workaround.
        A related, independently-checked noncompactness symptom (gtg_test.cljc,
        'generators-are-4x4-complex-matrices'): the 3 boost-type generators
        T^{0i} are ANTI-Hermitian, not Hermitian, while the 3 rotation-type
@@ -127,19 +144,32 @@
     (c/m-scale c/i total)))
 
 ;; ---------------------------------------------------------------------------
-;; 3. Trace-normalization honesty check -- Tr(T^aT^b)=1/2delta^ab
-;;    (`kotoba.sm.gauge/structure-constants`'s documented assumption) does NOT
-;;    hold for these noncompact so(1,3) generators. Recorded here as a live,
-;;    re-checkable predicate/value, not just asserted in the test file.
+;; 3. Trace-normalization honesty check -- Tr(T^aT^b)=1/2delta^ab (the
+;;    compact-group normalization `kotoba.sm.gauge/structure-constants` used
+;;    to hard-code) does NOT hold for these noncompact so(1,3) generators.
+;;    Phase 0a recorded this as a live, re-checkable predicate/value (not
+;;    just asserted in the test file), and it exposed a real bug in
+;;    `kotoba.sm.gauge/structure-constants` (see `rotation-raw-structure-constants`).
+;;    That bug has SINCE BEEN FIXED: `kotoba.sm.gauge/structure-constants` now
+;;    computes its OWN generator set's trace-Gram matrix instead of assuming
+;;    it is 1/2delta^AB, so it is correct for this so(1,3) generator set too.
+;;    The functions below are KEPT (not deleted) as an independent derivation
+;;    of the genuine structure constants and documentation of WHY the old
+;;    compact-group assumption fails here -- useful on their own merits, and
+;;    now doubling as the reference oracle that proves the gauge.cljc fix is
+;;    correct (gtg_test.cljc's
+;;    `structure-constants-now-match-genuine-values-after-gauge-fix`).
 ;; ---------------------------------------------------------------------------
 
 (defn generator-trace-gram
   "K[A][B] = Tr(T_A T_B) for the 6 basis generators (`generator-index-pairs`
   order) -- the so(1,3) analogue of the compact-group normalization
-  Tr(T^aT^b)=1/2delta^ab that `kotoba.sm.gauge/structure-constants`'s
-  docstring assumes. Returned as a plain 6x6 real matrix; gtg_test.cljc
-  additionally checks the imaginary part of every trace is ~0 before this
-  real part is taken at face value."
+  Tr(T^aT^b)=1/2delta^ab that `kotoba.sm.gauge/structure-constants` used to
+  hard-code (it now computes this same kind of Gram matrix generically from
+  whatever generator set it is given, `kotoba.sm.gauge/generator-gram`).
+  Returned as a plain 6x6 real matrix; gtg_test.cljc additionally checks the
+  imaginary part of every trace is ~0 before this real part is taken at face
+  value."
   []
   (vec (for [A (range 6)]
          (vec (for [B (range 6)]
@@ -153,9 +183,11 @@
   containing the timelike index 0) and +1 for the 3 rotation-type generators
   (index 3,4,5 = purely spatial pairs) -- the indefinite Minkowski signature
   shows up directly in the generators' own Killing-form-like trace pairing.
-  This predicate is exposed live (not just asserted once in the test file) so
-  any future GTG phase that wants a corrected/reweighted generator
-  normalization can check against it."
+  This predicate is exposed live (not just asserted once in the test file) as
+  a permanent record of why this generator set needed
+  `kotoba.sm.gauge/structure-constants`'s Gram-matrix generalization (it is
+  diagonal, so that generalization applies -- see the `kotoba.sm.gauge`
+  namespace docstring's SCOPE note on non-diagonal Gram matrices)."
   ([] (compact-group-trace-normalization-holds? 1e-9))
   ([eps]
    (let [K (generator-trace-gram)]
@@ -177,9 +209,13 @@
   taking the actual commutator of the basis generators and projecting it back
   onto the basis via `basis-projection` (using the REAL, non-1/2 trace
   pairing `generator-trace-gram`), independently of
-  `kotoba.sm.gauge/structure-constants`'s 1/2-delta assumption. This is the
-  reference value `rotation-raw-structure-constants` is compared against in
-  gtg_test.cljc."
+  `kotoba.sm.gauge/structure-constants`'s implementation. Now that
+  `kotoba.sm.gauge/structure-constants` has been generalized to compute its
+  own Gram matrix, this independently-derived value and
+  `rotation-raw-structure-constants` MATCH (gtg_test.cljc's
+  `structure-constants-now-match-genuine-values-after-gauge-fix`) -- this
+  function is kept anyway as an independent cross-check/derivation, not
+  merely a historical artifact."
   []
   (let [K (generator-trace-gram)]
     (vec (for [A (range 6)]
@@ -193,21 +229,25 @@
                            (basis-projection y C K))))))))))
 
 (defn rotation-raw-structure-constants
-  "`kotoba.sm.gauge/structure-constants` applied AS-IS to this namespace's 6
-  so(1,3) generators -- exactly the call the honesty check above is about.
-  Named so `rotation-field-strength` and the test suite share one computed
-  value instead of recomputing it ad hoc.
+  "`kotoba.sm.gauge/structure-constants` applied to this namespace's 6 so(1,3)
+  generators. Named so `rotation-field-strength` and the test suite share one
+  computed value instead of recomputing it ad hoc; kept its Phase-0a name
+  ('raw') for continuity even though it is no longer 'raw' in the sense of
+  being uncorrected -- see FIXED note below.
 
-  CAVEAT (see `compact-group-trace-normalization-holds?` /
-  `true-structure-constants` / gtg_test.cljc): `kotoba.sm.gauge/structure-constants`
-  assumes Tr(T^aT^b)=1/2delta^ab, which does NOT hold here, so these
-  particular numbers are off from the genuine so(1,3) structure constants by
-  a factor of 2*K[C][C] (verified numerically in gtg_test.cljc) -- i.e. a
-  factor of +2 for a rotation-type third index and -2 (wrong SIGN, not just
-  wrong magnitude) for a boost-type third index. Used here anyway, unmodified,
-  because Phase 0a's brief is to test the existing generic machinery against
-  this generator set as shipped and report what actually comes out -- not to
-  patch `kotoba.sm.gauge`."
+  FIXED (previously a CAVEAT -- see `compact-group-trace-normalization-holds?`
+  / `true-structure-constants` / gtg_test.cljc): Phase 0a found that
+  `kotoba.sm.gauge/structure-constants` assumed Tr(T^aT^b)=1/2delta^ab, which
+  does NOT hold for this generator set, making its output for this call off
+  from the genuine so(1,3) structure constants by a factor of 2*K[C][C] --
+  i.e. +2 for a rotation-type third index and -2 (wrong SIGN, not just wrong
+  magnitude) for a boost-type third index. `kotoba.sm.gauge/structure-constants`
+  has SINCE BEEN GENERALIZED to compute its own generator set's trace-Gram
+  matrix K[A][B]=Tr(T_AT_B) (which for THIS generator set is diagonal, so the
+  generalization applies cleanly -- see `kotoba.sm.gauge`'s namespace
+  docstring) instead of assuming it is 1/2delta^AB, so this call now returns
+  the GENUINE so(1,3) structure constants, numerically matching
+  `true-structure-constants` (verified in gtg_test.cljc)."
   []
   (gauge/structure-constants generators))
 
@@ -236,9 +276,10 @@
   `d-Omega[mu][nu][k]` = d Omega_nu^k / d x^mu (see
   `rotation-gauge-field-gradient`); `Omega[mu][k]` = Omega_mu^k(x) at the same
   spacetime point. The CURL term d_mu Omega_nu - d_nu Omega_mu is pure
-  antisymmetric differencing and carries NO structure-constant-normalization
-  caveat; the SELF-INTERACTION term g f^abc Omega_mu^b Omega_nu^c inherits the
-  `rotation-raw-structure-constants` normalization caveat documented there."
+  antisymmetric differencing and never depended on the structure-constant
+  normalization; the SELF-INTERACTION term g f^abc Omega_mu^b Omega_nu^c uses
+  `rotation-raw-structure-constants`, which (see the FIXED note there) now
+  returns the genuine so(1,3) structure constants."
   [d-Omega Omega g]
   (gauge/field-strength (rotation-raw-structure-constants) g d-Omega Omega))
 
