@@ -394,3 +394,67 @@
                 0.04 - 0 = 0.01"
         (is (close? (get-in g [0 1]) 0.01))
         (is (close? (get-in g [1 0]) 0.01))))))
+
+;; ---------------------------------------------------------------------------
+;; 10. Phase 0c -- curvature quadratic invariant (narrowly scoped, NOT the
+;;     LDG curvature scalar -- see gtg.cljc's namespace docstring, item 10,
+;;     and `curvature-quadratic-invariant`'s own docstring for the honest
+;;     caveat this test file assumes throughout).
+;; ---------------------------------------------------------------------------
+
+(deftest curvature-quadratic-invariant-vanishes-in-the-flat-limit
+  (testing "Omega_mu = 0 everywhere => R_mu-nu = 0 identically (Phase 0a's
+            rotation-field-strength, both curl and self-interaction terms
+            vanish exactly) => curvature-quadratic-invariant is EXACTLY 0.0,
+            not merely close"
+    (let [zero6 (vec (repeat 6 0.0))
+          zero-nu (vec (repeat 4 zero6))
+          d-Omega (vec (repeat 4 zero-nu))
+          Omega (vec (repeat 4 zero6))
+          R (gtg/rotation-field-strength d-Omega Omega 1.0)]
+      (is (every? #(= % 0.0) (flatten R)) "sanity: R is exactly zero")
+      (is (= 0.0 (gtg/curvature-quadratic-invariant R)))))
+  (testing "same conclusion via a field function and finite differencing
+            (rotation-gauge-field-gradient), like
+            rotation-field-strength-vanishes-for-constant-single-component-field"
+    (let [Omega-field (constantly (vec (repeat 4 (vec (repeat 6 0.0)))))
+          x [0.1 -0.2 0.3 0.4]
+          d-Omega (gtg/rotation-gauge-field-gradient Omega-field x)
+          Omega (Omega-field x)
+          R (gtg/rotation-field-strength d-Omega Omega 1.0)]
+      (is (close? (gtg/curvature-quadratic-invariant R) 0.0)))))
+
+(deftest curvature-quadratic-invariant-nonzero-for-concrete-curvature
+  (testing "reuses rotation-field-strength-curl-term-matches-yang-mills-form's
+            hand-built d-Omega/Omega (a purely-curl, self-interaction-free
+            curvature bivector with a single nonzero rotation-type component
+            k=3, i.e. T^{12}) and checks curvature-quadratic-invariant against
+            a value worked out by hand from tensor/lower2 + tensor/full-contract
+            + generator-trace-gram's K[3][3]=+1 (rotation-type)"
+    (let [zero6 (vec (repeat 6 0.0))
+          zero-nu (vec (repeat 4 zero6))
+          d-Omega (-> (vec (repeat 4 zero-nu))
+                      (assoc-in [1 0] (assoc zero6 3 2.0))   ;; d/dx Omega_t^{12} = 2
+                      (assoc-in [2 1] (assoc zero6 3 3.0)))  ;; d/dy Omega_x^{12} = 3
+          Omega (vec (repeat 4 zero6))
+          R (gtg/rotation-field-strength d-Omega Omega 1.0)
+          Rk (gtg/curvature-bivector-component R 3)]
+      (testing "sanity: only k=3 has any nonzero components, R[1][0][3]=2, R[2][1][3]=3
+                (and their antisymmetric partners), matching
+                rotation-field-strength-curl-term-matches-yang-mills-form"
+        (is (close? (get-in R [1 0 3]) 2.0))
+        (is (close? (get-in R [0 1 3]) -2.0))
+        (is (close? (get-in R [2 1 3]) 3.0))
+        (is (close? (get-in R [1 2 3]) -3.0))
+        (doseq [k (range 6) :when (not= k 3)]
+          (is (every? #(close? % 0.0) (flatten (gtg/curvature-bivector-component R k)))
+              (str "k=" k " should be identically zero"))))
+      (testing "by hand: R_mu-nu^3 R^{mu-nu}_3 (tensor/lower2 + tensor/full-contract on the
+                k=3 slice alone) = 2*(-2) + (-2)*2 + 3*3 + (-3)*(-3) = -4-4+9+9 = 10.0"
+        (is (close? (tensor/full-contract Rk (tensor/lower2 Rk)) 10.0)))
+      (testing "K[3][3] (rotation-type, T^{12}) is +1, so the weighted sum over k
+                (only k=3 nonzero) is 1 * 10.0 = 10.0"
+        (is (close? (get-in (gtg/generator-trace-gram) [3 3]) 1.0))
+        (is (close? (gtg/curvature-quadratic-invariant R) 10.0)))
+      (testing "and it is genuinely nonzero, not just close-to-zero-within-tolerance"
+        (is (> (Math/abs (double (gtg/curvature-quadratic-invariant R))) 1.0))))))
