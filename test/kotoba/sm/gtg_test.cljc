@@ -554,3 +554,90 @@
       (is (close? (tensor/mat-det singular-h) 0.0) "sanity: this h genuinely is singular")
       (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
                     (gtg/reciprocal-frame singular-h))))))
+
+;; ---------------------------------------------------------------------------
+;; 12. Phase 0e -- reciprocal-frame-minkowski, the GA-native (Minkowski-
+;;     paired) reciprocal frame that completes `reciprocal-frame`'s own
+;;     HONESTY NOTE derivation. See gtg.cljc's namespace docstring (item 13)
+;;     and `reciprocal-frame-minkowski`'s own docstring for the full
+;;     derivation and the exact numeric claims checked here.
+;; ---------------------------------------------------------------------------
+
+(deftest reciprocal-frame-minkowski-satisfies-minkowski-biorthogonality-for-a-general-invertible-h
+  (testing "(a) h-bar^mu . h_nu = delta^mu_nu under kotoba.sm.tensor/dot (the Minkowski
+            pairing, NOT the plain-component pairing reciprocal-frame's tests use) holds
+            for EVERY (mu,nu) pair, for a-non-identity-invertible-h"
+    (let [h a-non-identity-invertible-h
+          hbar (gtg/reciprocal-frame-minkowski h)]
+      (doseq [mu (range 4) nu (range 4)]
+        (is (close? (tensor/dot (nth hbar mu) (nth h nu)) (if (= mu nu) 1.0 0.0))
+            (str "h-bar_eta^" mu " . h_" nu " (Minkowski dot)")))))
+  (testing "and the result is numerically DIFFERENT from reciprocal-frame's plain-pairing
+            output for the SAME h: row 0 agrees on the timelike (index-0) component and
+            differs in SIGN on the spatial components -- [0.5 0 0.5 0] (Minkowski-paired)
+            vs [0.5 0 -0.5 0] (plain-paired)"
+    (let [h a-non-identity-invertible-h
+          hbar-eta (gtg/reciprocal-frame-minkowski h)
+          hbar-flat (gtg/reciprocal-frame h)]
+      (is (close? (get-in hbar-eta [0 0]) 0.5))
+      (is (close? (get-in hbar-eta [0 1]) 0.0))
+      (is (close? (get-in hbar-eta [0 2]) 0.5))
+      (is (close? (get-in hbar-eta [0 3]) 0.0))
+      (is (close? (get-in hbar-flat [0 0]) 0.5))
+      (is (close? (get-in hbar-flat [0 1]) 0.0))
+      (is (close? (get-in hbar-flat [0 2]) -0.5))
+      (is (close? (get-in hbar-flat [0 3]) 0.0))
+      (is (not (close? (get-in hbar-eta [0 2]) (get-in hbar-flat [0 2])))
+          "sanity: the two reciprocal frames genuinely disagree here, not just in name")
+      (testing "column-scaling relationship: Hbar_eta = Hbar_flat . eta holds for every entry"
+        (doseq [mu (range 4) a (range 4)]
+          (is (close? (get-in hbar-eta [mu a])
+                      (* (get-in hbar-flat [mu a]) (get-in tensor/metric [a a])))
+              (str "hbar-eta[" mu "][" a "] = hbar-flat[" mu "][" a "] * eta[" a "][" a "]")))))))
+
+(deftest reciprocal-frame-minkowski-equals-eta-at-position-gauge-identity
+  (testing "(b) at h = position-gauge-identity, h-bar_eta = eta EXACTLY (bit-for-bit) --
+            h-bar^0 = h_0 = [1 0 0 0] but h-bar^i = -h_i for the 3 spatial rows, DIFFERENT
+            from reciprocal-frame's h-bar = h at the same point"
+    (is (= (gtg/reciprocal-frame-minkowski gtg/position-gauge-identity) tensor/metric))
+    (is (not= (gtg/reciprocal-frame-minkowski gtg/position-gauge-identity)
+              (gtg/reciprocal-frame gtg/position-gauge-identity))
+        "reciprocal-frame-minkowski and reciprocal-frame genuinely disagree at h=identity")
+    (testing "and the Minkowski biorthogonality relation still holds there"
+      (let [hbar (gtg/reciprocal-frame-minkowski gtg/position-gauge-identity)]
+        (doseq [mu (range 4) nu (range 4)]
+          (is (close? (tensor/dot (nth hbar mu) (nth gtg/position-gauge-identity nu))
+                       (if (= mu nu) 1.0 0.0))
+              (str "h-bar_eta^" mu " . h_" nu " at h=position-gauge-identity")))))))
+
+(deftest reciprocal-frame-minkowski-equals-eta-lambda-for-a-constant-lorentz-transformation
+  (testing "(c) for h = a constant Lorentz transformation Lambda (kotoba.sm.vector-field's
+            existing boost/rotation matrices), h-bar_eta = eta . Lambda EXACTLY (up to
+            floating-point roundoff) -- see reciprocal-frame-minkowski's own docstring for
+            the derivation from Lambda^T eta Lambda = eta"
+    (doseq [lambda [(vf/boost-x 0.6)
+                     (vf/boost-y 0.3)
+                     (vf/boost-z -0.45)
+                     (vf/boost [0.3 0.2 0.1])
+                     (vf/rotation-x 0.9)
+                     (vf/rotation-y 1.234)
+                     (vf/rotation-z -2.1)]]
+      (let [hbar-eta (gtg/reciprocal-frame-minkowski lambda)
+            eta-lambda (tensor/mat-mat tensor/metric lambda)]
+        (doseq [mu (range 4) nu (range 4)]
+          (is (close? (get-in hbar-eta [mu nu]) (get-in eta-lambda [mu nu]))
+              (str "h-bar_eta[" mu "][" nu "] = (eta . Lambda)[" mu "][" nu "] for lambda=" lambda)))
+        (testing "and Minkowski biorthogonality holds for this h too"
+          (doseq [mu (range 4) nu (range 4)]
+            (is (close? (tensor/dot (nth hbar-eta mu) (nth lambda nu)) (if (= mu nu) 1.0 0.0))
+                (str "h-bar_eta^" mu " . h_" nu " for lambda=" lambda))))))))
+
+(deftest reciprocal-frame-minkowski-throws-on-a-singular-h
+  (testing "a non-invertible (determinant ~0) h throws ex-info -- propagated from
+            kotoba.sm.tensor/mat-inverse -- same guard reciprocal-frame relies on"
+    (let [singular-h [[1.0 2.0 3.0 4.0]
+                       [1.0 2.0 3.0 4.0]
+                       [0.0 1.0 0.0 0.0]
+                       [0.0 0.0 1.0 0.0]]]
+      (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
+                    (gtg/reciprocal-frame-minkowski singular-h))))))
