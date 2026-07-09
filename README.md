@@ -40,13 +40,14 @@ out of scope here.
   term assembly (Yang-Mills + Dirac + Higgs + Yukawa).
 - **`kotoba.sm.gtg`** -- Gauge Theory Gravity (Lasenby-Doran-Gull 1998)
   **rotation-gauge sector (Phase 0a), position-gauge sector (Phase 0b), a
-  narrowly-scoped curvature quadratic invariant (Phase 0c), and a general-h
-  reciprocal frame (Phase 0d) ONLY**. See "Gauge Theory Gravity scope" below
-  before reading or extending this namespace -- it is a narrow,
-  literature-faithful port of two sectors, one deliberately limited curvature
-  invariant, and one dual-basis construction, not a gravity engine.
+  narrowly-scoped curvature quadratic invariant (Phase 0c), a general-h
+  reciprocal frame (Phase 0d), and a GA-native Minkowski-paired reciprocal
+  frame (Phase 0e) ONLY**. See "Gauge Theory Gravity scope" below before
+  reading or extending this namespace -- it is a narrow, literature-faithful
+  port of two sectors, one deliberately limited curvature invariant, and two
+  dual-basis constructions, not a gravity engine.
 
-## Gauge Theory Gravity scope (`kotoba.sm.gtg`, Phase 0a + Phase 0b + Phase 0c + Phase 0d)
+## Gauge Theory Gravity scope (`kotoba.sm.gtg`, Phase 0a + Phase 0b + Phase 0c + Phase 0d + Phase 0e)
 
 Lasenby-Doran-Gull's 1998 observation is that the restricted Lorentz group
 `SO(1,3)+` can be gauged with the exact same machinery `kotoba.sm.gauge`
@@ -291,25 +292,102 @@ two-staged addition) adds:**
     investigation so a future pass does not have to repeat the literature
     search from scratch.
 
+**Phase 0e (GA-native Minkowski-paired reciprocal frame, plus a bounded,
+declined stage-2 curvature-scalar investigation) adds:**
+
+13. **`kotoba.sm.gtg/reciprocal-frame-minkowski`: the GA-native reciprocal
+    frame, using the Minkowski pairing instead of Stage 1's plain pairing.**
+    Stage 1's `reciprocal-frame` (point 11 above) uses the plain
+    component/Kronecker pairing; its own HONESTY NOTE already derives, but
+    stops short of implementing, the alternative built from
+    `kotoba.sm.tensor/dot`'s Minkowski invariant pairing instead -- the
+    pairing Geometric Algebra / GTG actually use for a scalar product.
+    `reciprocal-frame-minkowski` implements and independently re-verifies
+    exactly that: `Hbar_eta = (H^-1)^T . eta` (re-derived from the
+    biorthogonality condition `sum_a eta[a][a] Hbar[mu][a] H[nu][a] =
+    delta[mu][nu]`, i.e. the matrix equation `Hbar . eta . H^T = I`).
+    **Verified** (`gtg_test.cljc`): (a) the Minkowski-paired biorthogonality
+    relation holds for a concrete non-identity invertible `h`, and the
+    result differs numerically from `reciprocal-frame`'s plain-pairing
+    output for the *same* `h` -- concretely, row 0 is `[0.5 0 0.5 0]`
+    (Minkowski-paired) versus `[0.5 0 -0.5 0]` (plain-paired), agreeing on
+    the timelike column and flipping sign on every spatial column exactly as
+    predicted by `Hbar_eta = Hbar_flat . eta` (right-multiplying by the
+    diagonal `eta` scales column `a` by `eta[a][a]`). (b) at
+    `h = position-gauge-identity`, `h-bar_eta = eta` **exactly**
+    (bit-for-bit): `h-bar^0 = h_0` but `h-bar^i = -h_i` for the 3 spatial
+    rows -- genuinely different from `reciprocal-frame`'s `h-bar = h` at the
+    same point, confirming the divergence `reciprocal-frame`'s HONESTY NOTE
+    predicted without numerically checking it. (c) for a constant Lorentz
+    transformation `h = Lambda` (`kotoba.sm.vector-field`'s existing
+    boost/rotation matrices), `h-bar_eta = eta . Lambda` **exactly** (up to
+    floating-point roundoff) -- a closed form derived from `vf/lorentz?`'s
+    defining property `Lambda^T eta Lambda = eta`, checked for several
+    concrete boosts/rotations.
+
+14. **A bounded, declined attempt at independently verifying the true LDG
+    curvature scalar `R` via linearized weak-field General Relativity
+    (per this phase's task instructions: independent numerical
+    verification, *not* a further literature read).** Plan: (i) pick a small
+    metric perturbation `h_mu-nu(x)` with the known linearized-GR Ricci
+    scalar `R^(1) = d^mu d^nu h_mu-nu - []h` (a standard textbook result);
+    (ii) build a position-gauge field `h_mu(x) = delta_mu^nu +
+    (1/2)h_mu^nu(x)` reproducing it via `derived-metric` to linear order
+    (worked out and confirmed straightforward: `derived-metric` of that `h`
+    equals `eta_mu-nu + h_mu-nu(x) + O(h^2)` exactly as expected, no new
+    machinery needed); (iii) obtain the *corresponding* rotation-gauge field
+    `Omega_mu(x)` from `h_mu(x)`'s derivatives; (iv) run
+    `rotation-field-strength`; (v) test a candidate `R[mu][nu][k]->scalar`
+    formula against `R^(1)`. **This attempt stopped at step (iii).** This
+    codebase has no `h_mu(x) -> Omega_mu(x)` correspondence anywhere
+    (grep-confirmed), and unlike the ordinary general-relativity
+    vierbein-postulate torsion-free spin connection (which relates a
+    curved-spacetime tetrad `e^a_mu` -- one flat index, one curved-coordinate
+    index -- to Christoffel symbols), GTG's `h_mu^nu` has *both* indices as
+    components of the *same* flat background vector space: `h` maps a flat
+    gauge-coordinate direction to a flat physical-spacetime direction, with
+    no curved-coordinate side to import the ordinary tetrad-postulate
+    formula onto. The genuine GTG-specific "intrinsic" Omega-from-h relation
+    (part of LDG's own gauge-invariance/field-equation construction) is
+    exactly the kind of GTG-paper-specific, index/sign-convention-bearing
+    formula this pass was told not to re-derive from the literature this
+    round, and it cannot be safely reconstructed from generic (non-GTG)
+    general-relativity textbook knowledge -- ordinary tetrad calculus does
+    not carry over to GTG's flat, non-curved-coordinate formalism without
+    exactly the kind of paper-specific translation step this codebase's own
+    established practice already treats as too risky to guess at without an
+    independent reference value (same class of risk as point 12's blocker,
+    `rotation-field-strength`'s and `curvature-quadratic-invariant`'s
+    docstrings). So this investigation stopped at the *same class* of
+    blocker Phase 0d stage 2 hit -- an unverifiable index/sign convention,
+    no independent numeric reference value -- one step *earlier* in the
+    pipeline (`h -> Omega`, rather than `R -> scalar`). **Per the task's own
+    instructions, declining to implement here is the correct outcome, not a
+    failure**: `curvature-scalar` remains unimplemented.
+
 **Explicitly out of scope, not implemented here** (deliberately, deferred to
 a later phase if ever pursued): the true Lasenby-Doran-Gull curvature scalar
 `R` for **any** `h` (see point 12 above for the Phase 0d investigation and
-exactly which remaining step blocked implementation, and point 10 above for
-how Phase 0c's quadratic invariant differs from it even at
-`h = position-gauge-identity`), the Einstein multivector, the GTG action
-principle and field equations, any proof of equivalence to General
-Relativity, and any dark-matter/dark-energy/de-Sitter extension. **Also out
-of scope**: the FULL combined `h_mu` + `Omega_mu` GTG covariant derivative
-(using `h` to relate the rotation-gauge connection to an actual
-spacetime-vector derivative/torsion) -- Phase 0a's covariant derivative (5)
-and Phase 0b's derived metric (8) are developed independently of each other
-here, not yet combined, and Phase 0c's curvature invariant (10) is built from
-Phase 0a's `R_mu-nu` alone, without reference to `h` at all (Phase 0d's
-`reciprocal-frame` does not change this -- it is not yet wired into either);
-that combination is deferred to a later phase (Phase 0e or beyond). **This
-namespace implements the rotation-gauge sector's generator algebra/covariant
-derivative, the position-gauge sector's derived metric, one narrowly-scoped
-curvature quadratic invariant, and a general-h dual-basis reciprocal frame
+exactly which remaining step blocked implementation, point 10 above for how
+Phase 0c's quadratic invariant differs from it even at
+`h = position-gauge-identity`, and point 14 above for Phase 0e's further,
+declined attempt via independent numerical verification and exactly where
+*that* attempt stopped), the Einstein multivector, the GTG action principle
+and field equations, any proof of equivalence to General Relativity, and any
+dark-matter/dark-energy/de-Sitter extension. **Also out of scope**: the FULL
+combined `h_mu` + `Omega_mu` GTG covariant derivative (using `h` to relate
+the rotation-gauge connection to an actual spacetime-vector
+derivative/torsion) -- Phase 0a's covariant derivative (5) and Phase 0b's
+derived metric (8) are developed independently of each other here, not yet
+combined, and Phase 0c's curvature invariant (10) is built from Phase 0a's
+`R_mu-nu` alone, without reference to `h` at all (neither Phase 0d's
+`reciprocal-frame` nor Phase 0e's `reciprocal-frame-minkowski` changes this --
+neither is wired into either, and point 14 above records exactly why Phase 0e
+could not bridge this gap either); that combination is deferred to a later
+phase (Phase 0f or beyond). **This namespace implements the rotation-gauge
+sector's generator algebra/covariant derivative, the position-gauge sector's
+derived metric, one narrowly-scoped curvature quadratic invariant, and two
+general-h dual-basis reciprocal frames (plain-pairing and Minkowski-pairing)
 only** -- it should not be described as "GTG implemented" or as any kind of
 gravity engine.
 
