@@ -1,7 +1,8 @@
 (ns kotoba.sm.gtg
   "Gauge Theory Gravity (Lasenby-Doran-Gull 1998, 'Gravity, gauge theories and
-  geometric algebra') -- ROTATION-GAUGE SECTOR ONLY, Phase 0a. See the
-  'Scope' section of the repo README for the ADR reference.
+  geometric algebra') -- ROTATION-GAUGE SECTOR (Phase 0a) AND POSITION-GAUGE
+  SECTOR (Phase 0b) ONLY. See the 'Scope' section of the repo README for the
+  ADR reference.
 
   GTG's central observation (well known in the literature, not a new result
   of this namespace) is that the restricted Lorentz group SO(1,3)+ can be
@@ -64,15 +65,57 @@
        EXACTLY (not just approximately) `kotoba.sm.spinor`'s existing free
        Dirac-equation residual (`dirac-residual-with-rotation-gauge`).
 
-  EXPLICITLY OUT OF SCOPE, NOT IMPLEMENTED HERE: the position gauge field
-  h_mu, the derived spacetime metric g_mu-nu = h_mu . h_nu, the Riemann/Ricci
-  curvature scalars built from R_mu-nu, the Einstein multivector, the GTG
-  action principle and field equations, any proof of equivalence to General
-  Relativity, and any dark-matter/dark-energy/de-Sitter extension. Those are
+  PHASE 0b (position-gauge sector) adds:
+    7. the position gauge field h_mu(x): at each spacetime point, an
+       invertible linear map from gauge coordinates to physical spacetime,
+       represented as a 4x4 real matrix `h[mu][nu]` = h_mu^nu (row `mu` IS
+       the physical four-vector h_mu, in the same [t x y z] component
+       convention `kotoba.sm.tensor`/`kotoba.sm.vector-field` use everywhere
+       else). `position-gauge-identity` is the trivial choice h_mu^nu =
+       delta_mu^nu ('gauge coordinates = physical coordinates'). Unlike the
+       rotation-gauge sector's Omega_mu, this namespace does NOT implement a
+       general matrix inverse/determinant to check h's invertibility
+       numerically (the same deliberate omission `kotoba.sm.gauge` already
+       documents for its own structure-constant derivation) -- invertibility
+       is a precondition on `h`, not something computed here.
+    8. the derived metric g_mu-nu(x) = h_mu(x) . h_nu(x) = eta_ab h_mu^a(x)
+       h_nu^b(x) (`derived-metric`, `derived-metric-field`), computed by
+       treating each row of `h` as an upper-index four-vector and reusing
+       `kotoba.sm.tensor/dot` (the existing Minkowski inner product) row by
+       row -- no new inner-product machinery. A flat-limit check (in
+       gtg_test.cljc) that at h = `position-gauge-identity` this is EXACTLY
+       (bit-for-bit, integer arithmetic throughout, not merely close)
+       `kotoba.sm.tensor/metric`.
+    9. a consistency check that `kotoba.sm.vector-field`'s PRE-EXISTING
+       global SO(3,1)+ representation (`boost`/`rotation-x`/`rotation-y`/
+       `rotation-z`) is CONTAINED in this sector as the special case
+       'h_mu = a constant Lorentz matrix, Omega_mu = 0' -- a constant h built
+       from any Lorentz transformation reproduces the flat metric exactly
+       (up to floating-point roundoff from sqrt/cos/sin), because
+       Lambda^T eta Lambda = eta (`vector-field/lorentz?`'s defining
+       property) algebraically implies Lambda eta Lambda^T = eta, which is
+       exactly what `derived-metric` computes row-by-row for h = Lambda --
+       see the section-7 header comment below for the derivation, and
+       gtg_test.cljc's
+       `global-lorentz-transformations-are-the-constant-flat-special-case`
+       for the numeric check (several concrete boosts and rotations).
+       `derived-metric-matches-flat?` packages this equality check (used for
+       both (8)'s exact identity case and (9)'s Lorentz-matrix case).
+
+  EXPLICITLY OUT OF SCOPE, NOT IMPLEMENTED HERE (Phase 0a+0b): the
+  Riemann/Ricci curvature scalars built from R_mu-nu, the Einstein
+  multivector, the GTG action principle and field equations, any proof of
+  equivalence to General Relativity, and any dark-matter/dark-energy/
+  de-Sitter extension. ALSO OUT OF SCOPE: the FULL combined h_mu+Omega_mu GTG
+  covariant derivative (i.e. using h to relate the rotation-gauge connection
+  to an actual spacetime-vector derivative/torsion) -- this namespace's
+  Phase-0a covariant derivative (5) and Phase-0b derived metric (8) are
+  developed independently of each other, not yet combined. Those are
   legitimate, much larger follow-up efforts, deliberately deferred to a later
-  phase -- this namespace is a limited, literature-faithful port of the
-  rotation-gauge SECTOR ONLY, and must not be read as 'GTG is implemented
-  here' or as any kind of gravity engine."
+  phase (Phase 0c or beyond) -- this namespace is a limited,
+  literature-faithful port of the rotation-gauge and position-gauge SECTORS
+  ONLY, and must not be read as 'GTG is implemented here' or as any kind of
+  gravity engine."
   (:require [kotoba.sm.complex :as c]
             [kotoba.sm.tensor :as tensor]
             [kotoba.sm.spinor :as spinor]
@@ -333,3 +376,95 @@
         i-slash-D (c/v-scale c/i slash-D)
         m-psi (c/v-scale (c/c m 0) psi-x)]
     (c/v-sub i-slash-D m-psi)))
+
+;; ---------------------------------------------------------------------------
+;; 7+8+9. position gauge field h_mu(x) and the derived metric g_mu-nu(x),
+;;    Phase 0b -- see the namespace docstring's Phase-0b SCOPE note (items
+;;    7-9) for the full description.
+;;
+;;    COMPATIBILITY WITH THE EXISTING GLOBAL SO(3,1)+ REPRESENTATION (item 9):
+;;    a CONSTANT position-gauge field h = Lambda, built from ANY
+;;    `kotoba.sm.vector-field/boost`/`rotation-x`/`rotation-y`/`rotation-z`
+;;    matrix (with Omega_mu = 0, i.e. no rotation-gauge connection -- Phase
+;;    0a's sector switched off), is included in this sector as a special case
+;;    that reproduces the flat metric EXACTLY, not approximately. Derivation:
+;;    `vector-field/lorentz?` checks Lambda^T eta Lambda = eta. Right-multiply
+;;    both sides by Lambda^-1: Lambda^T eta = eta Lambda^-1, then left-
+;;    multiply by eta^-1 = eta (eta is its own inverse in this basis):
+;;    Lambda^-1 = eta Lambda^T eta. Substitute into Lambda Lambda^-1 = I:
+;;    Lambda eta Lambda^T eta = I, then right-multiply by eta^-1 = eta:
+;;    Lambda eta Lambda^T = eta. So Lambda^T eta Lambda = eta ALSO implies the
+;;    'other' contraction Lambda eta Lambda^T = eta -- and `derived-metric`
+;;    applied to h = Lambda computes exactly
+;;    (derived-metric Lambda)[mu][nu] = sum_a eta[a][a] Lambda[mu][a] Lambda[nu][a]
+;;    which IS (Lambda eta Lambda^T)[mu][nu] (eta diagonal collapses the
+;;    double sum to the single shared index a). Hence `derived-metric` of any
+;;    Lorentz matrix equals `kotoba.sm.tensor/metric` exactly (up to
+;;    floating-point roundoff from the sqrt/cos/sin inside `boost`/
+;;    `rotation-*`), numerically checked in gtg_test.cljc's
+;;    `global-lorentz-transformations-are-the-constant-flat-special-case`.
+;; ---------------------------------------------------------------------------
+
+(def position-gauge-identity
+  "The trivial position gauge field h_mu^nu = delta_mu^nu (the 4x4 identity
+  matrix): 'gauge coordinates = physical coordinates'. `h[mu][nu]` is
+  h_mu^nu -- the physical-spacetime component `nu` of the image, under the
+  position-gauge map h, of the gauge-coordinate-direction-`mu` basis vector,
+  so row `mu` of this matrix IS the physical four-vector h_mu (same
+  [t x y z]-component convention `kotoba.sm.tensor`/`kotoba.sm.vector-field`
+  use everywhere else). Kept as plain integers (not floats) so that
+  `derived-metric` applied to it stays exact integer arithmetic throughout,
+  for a bit-for-bit (not merely approximate) flat-limit check against
+  `kotoba.sm.tensor/metric` -- see gtg_test.cljc's
+  `flat-limit-h-reproduces-minkowski-metric-exactly`."
+  [[1 0 0 0]
+   [0 1 0 0]
+   [0 0 1 0]
+   [0 0 0 1]])
+
+(defn derived-metric
+  "The GTG derived metric g_mu-nu = h_mu . h_nu = eta_ab h_mu^a h_nu^b, for a
+  position-gauge-field VALUE `h` (a 4x4 real matrix, row `mu` = the physical
+  four-vector h_mu -- see `position-gauge-identity`) AT A SINGLE spacetime
+  point. Computed by treating each row of `h` as an upper-index four-vector
+  and taking `kotoba.sm.tensor/dot` (the EXISTING Minkowski inner product,
+  eta = diag(1,-1,-1,-1)) of every pair of rows -- this function supplies
+  only the h_mu . h_nu bookkeeping on top of that existing inner product, no
+  new linear-algebra machinery.
+
+  Returned as a plain 4x4 real matrix, the same shape as
+  `kotoba.sm.tensor/metric` itself -- which is exactly what this reduces to
+  at `h` = `position-gauge-identity` (gtg_test.cljc's
+  `flat-limit-h-reproduces-minkowski-metric-exactly`), and, more generally,
+  at `h` = any constant Lorentz transformation matrix from
+  `kotoba.sm.vector-field` (this namespace's Phase-0b section-7 header
+  comment above, and gtg_test.cljc's
+  `global-lorentz-transformations-are-the-constant-flat-special-case`)."
+  [h]
+  (vec (for [mu (range 4)]
+         (vec (for [nu (range 4)]
+                (tensor/dot (nth h mu) (nth h nu)))))))
+
+(defn derived-metric-field
+  "g_mu-nu(x) for a position-gauge FIELD function h-field: R^4 -> 4x4 matrix
+  (h-field(x)[mu][nu] = h_mu^nu(x)), at spacetime point x -- `derived-metric`
+  applied to (h-field x). The field-valued analogue of `derived-metric`, the
+  same relationship `rotation-gauge-field-gradient`/`rotation-field-strength`
+  already have to a single `Omega` VALUE via their `Omega-field` argument."
+  [h-field x]
+  (derived-metric (h-field x)))
+
+(defn derived-metric-matches-flat?
+  "Does the derived metric g_mu-nu built from position-gauge-field VALUE `h`
+  equal `kotoba.sm.tensor/metric`, component by component, within `eps`?
+  Used both for the exact flat-limit check (`h` = `position-gauge-identity`)
+  and the global-Lorentz-as-special-case check (`h` = a constant Lorentz
+  matrix from `kotoba.sm.vector-field`) -- see this namespace's Phase-0b
+  section-7 header comment above for why both are expected to hold exactly,
+  up to floating-point roundoff."
+  ([h] (derived-metric-matches-flat? h 1e-9))
+  ([h eps]
+   (let [g (derived-metric h)]
+     (every? true?
+             (for [mu (range 4) nu (range 4)]
+               (< (abs-num (- (get-in g [mu nu]) (get-in tensor/metric [mu nu]))) eps))))))

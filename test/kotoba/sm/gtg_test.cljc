@@ -1,10 +1,11 @@
 (ns kotoba.sm.gtg-test
-  "Tests for the GTG (Lasenby-Doran-Gull 1998) rotation-gauge sector, Phase
-  0a -- see kotoba.sm.gtg's namespace docstring for the exact scope. The
-  `trace-normalization-*` tests below are the load-bearing ones: they record,
-  numerically, that kotoba.sm.gauge's (Phase-0a-era, compact-group-only)
-  trace normalization Tr(T^aT^b)=1/2delta^ab does NOT hold for the noncompact
-  so(1,3) bivector generators.
+  "Tests for the GTG (Lasenby-Doran-Gull 1998) rotation-gauge sector (Phase
+  0a) and position-gauge sector (Phase 0b) -- see kotoba.sm.gtg's namespace
+  docstring for the exact scope. The `trace-normalization-*` tests below are
+  the load-bearing ones: they record, numerically, that kotoba.sm.gauge's
+  (Phase-0a-era, compact-group-only) trace normalization
+  Tr(T^aT^b)=1/2delta^ab does NOT hold for the noncompact so(1,3) bivector
+  generators.
 
   `structure-constants-now-match-genuine-values-after-gauge-fix` (formerly
   `raw-structure-constants-diverge-from-genuine-ones`, see that deftest's own
@@ -14,10 +15,19 @@
   SINCE BEEN FIXED by generalizing `kotoba.sm.gauge/structure-constants` to
   compute its own generator set's trace-Gram matrix instead of assuming it is
   1/2delta^AB -- so raw and genuine now MATCH. These numbers are recorded
-  honestly either way, not massaged to force agreement."
+  honestly either way, not massaged to force agreement.
+
+  `flat-limit-h-reproduces-minkowski-metric-exactly` and
+  `global-lorentz-transformations-are-the-constant-flat-special-case`
+  (Phase 0b, position-gauge sector) are the load-bearing tests for the
+  position gauge field h_mu and its derived metric g_mu-nu -- see
+  kotoba.sm.gtg's Phase-0b SCOPE note (items 7-9) for the exact claims being
+  checked."
   (:require [clojure.test :refer [deftest is testing]]
             [kotoba.sm.complex :as c]
             [kotoba.sm.spinor :as spinor]
+            [kotoba.sm.tensor :as tensor]
+            [kotoba.sm.vector-field :as vf]
             [kotoba.sm.gtg :as gtg]))
 
 (defn- close? [a b] (< (Math/abs (double (- a b))) 1e-6))
@@ -207,3 +217,57 @@
                   themselves ~0, since plane-wave is an exact free-Dirac-equation solution"
           (is (every? (fn [z] (< (c/abs2 z) 1e-6)) r-plain))
           (is (every? (fn [z] (< (c/abs2 z) 1e-6)) r-gauge)))))))
+
+;; ---------------------------------------------------------------------------
+;; 7+8+9. position gauge field h_mu(x) and the derived metric g_mu-nu(x),
+;;    Phase 0b
+;; ---------------------------------------------------------------------------
+
+(deftest flat-limit-h-reproduces-minkowski-metric-exactly
+  (testing "h = position-gauge-identity (h_mu^nu = delta_mu^nu) gives g_mu-nu
+            EXACTLY kotoba.sm.tensor/metric -- bit-for-bit (integer arithmetic
+            throughout), not merely close within a tolerance"
+    (let [g (gtg/derived-metric gtg/position-gauge-identity)]
+      (is (= g tensor/metric))
+      (doseq [mu (range 4) nu (range 4)]
+        (is (= (get-in g [mu nu]) (get-in tensor/metric [mu nu]))
+            (str "g[" mu "][" nu "] exact match")))))
+  (testing "derived-metric-matches-flat? agrees, at the default epsilon"
+    (is (true? (gtg/derived-metric-matches-flat? gtg/position-gauge-identity))))
+  (testing "derived-metric-field composes h-field + point evaluation correctly for a
+            constant identity field, at several distinct spacetime points"
+    (let [h-field (constantly gtg/position-gauge-identity)]
+      (doseq [x [[0 0 0 0] [1.0 2.0 -3.0 0.5] [-4.0 0.0 1.0 7.0]]]
+        (is (= tensor/metric (gtg/derived-metric-field h-field x)))))))
+
+(deftest global-lorentz-transformations-are-the-constant-flat-special-case
+  (testing "a constant position-gauge field built from ANY existing kotoba.sm.vector-field
+            Lorentz boost/rotation matrix reproduces the flat metric exactly (within
+            floating-point roundoff from sqrt/cos/sin, not merely a loose 'close') -- the
+            mathematical content is Lambda eta Lambda^T = eta, which follows algebraically
+            from Lambda^T eta Lambda = eta (vf/lorentz?'s defining property), see this
+            namespace's Phase-0b section-7 header comment for the derivation"
+    (doseq [lambda [(vf/boost-x 0.6)
+                     (vf/boost-y 0.3)
+                     (vf/boost-z -0.45)
+                     (vf/boost [0.3 0.2 0.1])
+                     (vf/rotation-x 0.9)
+                     (vf/rotation-y 1.234)
+                     (vf/rotation-z -2.1)]]
+      (is (vf/lorentz? lambda) "sanity: lambda actually IS a Lorentz transformation")
+      (is (gtg/derived-metric-matches-flat? lambda 1e-9)
+          (str "derived metric from constant h=" lambda " should equal the flat metric"))))
+  (testing "concretely, for a single boost, every derived-metric component matches
+            kotoba.sm.tensor/metric numerically"
+    (let [lambda (vf/boost-x 0.6)
+          g (gtg/derived-metric lambda)]
+      (doseq [mu (range 4) nu (range 4)]
+        (is (close? (get-in g [mu nu]) (get-in tensor/metric [mu nu]))
+            (str "g[" mu "][" nu "]")))))
+  (testing "the identity Lorentz transformation (zero boost, vf/boost's own literal-integer
+            identity-matrix branch) reproduces g_mu-nu EXACTLY, the same bit-for-bit
+            equality as position-gauge-identity itself -- not a coincidence, since
+            vf/boost's zero-velocity branch literally returns position-gauge-identity's
+            same 4x4 integer identity matrix"
+    (let [g (gtg/derived-metric (vf/boost [0 0 0]))]
+      (is (= g tensor/metric)))))
