@@ -423,6 +423,46 @@
     cosmological solutions. See the EXPLICITLY OUT OF SCOPE paragraph below
     for the full list still deferred.
 
+    *** CONFIRMED, UNRESOLVED BUG for GENUINELY TIME-DEPENDENT h (read before
+    trusting a `curvature-scalar` result for any h-field where Hdot!=0,
+    i.e. the Hubble-like rate itself changes with time -- NOT merely
+    time-dependent components, since de Sitter's h IS time-dependent but has
+    Hdot=0 identically): *** investigating a nonzero-density FRW cosmology
+    extension (matter-dominated Einstein-de-Sitter dust, H(t)=2/(3t),
+    Hdot(t)=-2/(3t^2)) found `curvature-scalar` returns EXACTLY 7x the
+    correct value -- reproduced independently by two people, stable to
+    ~7 significant figures across fd-h in [5e-5,1e-3] and t in [1.5,10] (a
+    clean algebraic factor, not finite-difference truncation noise). An
+    independent, GTG/geometric-algebra-free derivation (ordinary Christoffel
+    symbols from the metric this h-field represents) confirms the CORRECT
+    answer is R=-12*H^2-6*Hdot; this pipeline instead computes
+    -12*H^2+6*Hdot -- the Hdot (time-derivative) contribution alone has the
+    WRONG SIGN, while the H^2 (non-derivative) contribution is exactly
+    correct. Root-caused as narrowly as two independent, multi-hour
+    investigations could manage (both scratch-verified, not landed as repo
+    code): `H-field`, `omega-from-h` (checked directly against LDG eq 4.49/
+    4.50 using the code's OWN outputs, and cross-verified against an
+    independent Python geometric-algebra reference engine), and
+    `riemann-basis-pair`'s formula-level structure (checked term-by-term
+    against a hand re-derivation of eqs 4.44/4.46/4.47/4.48) each
+    individually reproduce their OWN defining equation correctly when tested
+    in isolation with concrete numeric or symbolic inputs -- yet the
+    end-to-end composition is measurably wrong specifically in the
+    time-derivative channel. A candidate one-line patch (negating `L-a-omega`'s
+    rho=0/time-direction contribution only) numerically fixes the dust
+    reproduction case and provably does not change the Schwarzschild/de-Sitter
+    regression results (both have zero rho=0 contribution structurally) --
+    but was NOT applied, because it directly contradicts a separate, simpler
+    numeric check of the identity `L-a-omega` is supposed to implement
+    (a.hbar(grad)F = h(a).grad F, verified directly on a plain scalar test
+    function F(x)=t, a=e_0) -- applying the patch would make THAT simpler
+    identity check fail. This is flagged as symptom-suppression, not a
+    verified fix, and deliberately left OUT of this codebase. DO NOT trust
+    `curvature-scalar` (or `riemann-map`/`riemann-basis-pair`/`omega-from-h`
+    composed end-to-end) for any h-field with Hdot!=0 until this is properly
+    resolved -- Schwarzschild (static) and de Sitter (Hdot=0) remain
+    verified and safe to rely on.
+
   EXPLICITLY OUT OF SCOPE, NOT IMPLEMENTED HERE (Phase 0a+0b+0c+0d+0e+1):
   the Einstein tensor/multivector G(a), the GTG action principle, the general
   (matter/torsion-sourced) field equation (only the vacuum/spin-free closed
@@ -1525,6 +1565,14 @@
 
     Ricci(b) = sum_a gamma^a . R(e_a ^ b)                              (4.11)
     R = sum_b gamma^b . Ricci(b) = sum_{a,b} gamma^a.(gamma^b.R(e_a^e_b))  (4.12)
+
+  *** CONFIRMED, UNRESOLVED BUG for h-fields with Hdot!=0 -- see this
+  namespace's PHASE 1 SCOPE NOTE (top of namespace docstring) for the full
+  writeup. Summary: returns exactly 7x the correct value for a genuine
+  matter-dominated FRW dust solution (Hdot!=0); only verified correct for
+  Schwarzschild (static) and de Sitter (Hdot=0 identically). DO NOT trust
+  this function for any h-field whose expansion/Hubble-like rate itself
+  changes with time until this is resolved. ***
 
   *** BUG FIX (found by independent adversarial review, see git history/PR
   description): *** an earlier version of this function computed
