@@ -641,3 +641,306 @@
                        [0.0 0.0 1.0 0.0]]]
       (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
                     (gtg/reciprocal-frame-minkowski singular-h))))))
+
+;; ---------------------------------------------------------------------------
+;; PHASE 1 -- the vacuum/spin-free field equation Omega(h) (eq 4.53), the
+;;   covariant Riemann map R(a^b) (eq 4.48), and the true LDG Ricci scalar
+;;   (kotoba.sm.gtg's namespace docstring, PHASE 1 section, items 15-17).
+;;   This test file's Schwarzschild-solution regression tests are the
+;;   load-bearing ones for this whole phase.
+;;
+;;   GOLDEN VALUES: the "expected" numbers hardcoded below were produced by
+;;   an INDEPENDENT standalone Python/numpy+sympy verification script (not
+;;   part of this repo -- see ADR-2607102300 for its provenance) that
+;;   implements LDG eqs (4.42)/(4.46)/(4.48)/(4.49)/(4.53) with a from-
+;;   scratch, self-tested Clifford-algebra engine and EXACT (sympy) symbolic
+;;   derivatives (not finite differences) for the h_mu(x)->Omega_mu(x) step,
+;;   and independently confirmed that pipeline reproduces LDG's own closed-
+;;   form Schwarzschild solution (eq 6.73) to ~1e-13. This Clojure port
+;;   instead uses FINITE DIFFERENCES at BOTH derivative levels (this
+;;   codebase has no symbolic-differentiation layer -- see kotoba.sm.gtg's
+;;   PHASE 1 header comment for exactly which two levels and why), so its
+;;   own achievable precision is looser: empirically ~1e-9..1e-10 at the
+;;   default `kotoba.sm.gtg/default-fd-h` step (measured by running the SAME
+;;   nested-finite-difference algorithm in the Python reference before this
+;;   Clojure port was written, then confirmed again on the actual Clojure
+;;   output below) -- `close-fd?`'s eps=1e-7 gives ~2-3 orders of magnitude
+;;   of headroom above that, tight enough to catch a genuine formula/sign
+;;   bug but loose enough not to be a flaky FD-noise trip-wire.
+;; ---------------------------------------------------------------------------
+
+(defn- close-fd?
+  "Tighter closeness check than `close?` (which uses eps=1e-6, calibrated for
+  Phase 0a-0e's own finite-difference tests), for Phase 1's Schwarzschild-
+  solution regression tests -- see this section's header comment for why
+  eps=1e-7 is the right order of magnitude given nested-finite-difference
+  precision (empirically ~1e-9..1e-10)."
+  ([a b] (close-fd? a b 1e-7))
+  ([a b eps] (< (Math/abs (double (- a b))) eps)))
+
+(defn- schwarzschild-hbar
+  "LDG eq (6.79)/(6.80), the Painleve-Gullstrand/Newtonian-gauge Schwarzschild
+  VACUUM solution: hbar(a) = a - sqrt(2M/r)(a.e_r)e_t, where '.' is the
+  EUCLIDEAN 3D dot product of a's SPATIAL components with the unit radial
+  vector e_r -- NOT `kotoba.sm.tensor/dot`'s Minkowski pairing (an
+  independently-verified convention finding from the standalone Python
+  reference script, checked there against LDG's own component Table 4 for
+  this solution -- same convention Phase 0d/0e's docstrings already flag for
+  this codebase's OTHER h-related constructions). Returns the STORED-
+  convention 4x4 matrix (row mu = hbar(e_mu), same layout `h`/
+  `position-gauge-identity` use)."
+  [x M]
+  (let [[_ x1 x2 x3] x
+        r (Math/sqrt (+ (* x1 x1) (* x2 x2) (* x3 x3)))
+        n [(/ x1 r) (/ x2 r) (/ x3 r)]
+        k (Math/sqrt (/ (* 2.0 M) r))]
+    [[1.0 0.0 0.0 0.0]
+     [(- (* k (nth n 0))) 1.0 0.0 0.0]
+     [(- (* k (nth n 1))) 0.0 1.0 0.0]
+     [(- (* k (nth n 2))) 0.0 0.0 1.0]]))
+
+(defn- schwarzschild-h
+  "h = `gtg/frame-adjoint` of `schwarzschild-hbar` -- the position-gauge
+  field VALUE this codebase's `h`-shaped functions (`omega-from-h`,
+  `derived-metric`, ...) expect (LDG's own `h`, Phase 0b's existing
+  convention). LDG states this solution hbar-FIRST (eq 6.79); `frame-adjoint`
+  is used here to convert to h, the SAME formula `omega-from-h` uses
+  internally to convert h to hbar (self-inverse, see `frame-adjoint`'s own
+  docstring) -- so this test's h-field is derived from the paper's own
+  statement of the solution, not independently guessed."
+  [x M]
+  (gtg/frame-adjoint (schwarzschild-hbar x M)))
+
+(defn- schwarzschild-h-field [M] (fn [x] (schwarzschild-h x M)))
+
+(defn- unit-radial [x]
+  (let [[_ x1 x2 x3] x
+        r (Math/sqrt (+ (* x1 x1) (* x2 x2) (* x3 x3)))]
+    [(/ x1 r) (/ x2 r) (/ x3 r)]))
+
+(def ^:private e-t [1.0 0.0 0.0 0.0])
+
+;; -- Test point A: x=[0 3 4 0] (r=5, a 3-4-5 triangle), M=0.1 --
+;; -- Test point B: x=[0 1 2 2] (r=3), M=0.05 --
+;; two distinct spacetime points and two distinct mass parameters, per the
+;; task's requirement of checking against LDG eq (6.73) at "at least 2
+;; different test points/mass parameters".
+
+;; ---------------------------------------------------------------------------
+;; Phase 1 primitives -- frame-adjoint, bivector<->matrix, wedge-vectors,
+;; vector-dot-bivector, bivector-commutator (item 15/16's minimal new GA
+;; primitives, kotoba.sm.gtg's PHASE 1 section header comment).
+;; ---------------------------------------------------------------------------
+
+(deftest frame-adjoint-is-self-inverse-and-matches-known-schwarzschild-pair
+  (testing "frame-adjoint is an involution: applying it twice returns the
+            original matrix, for a general (non-identity) h"
+    (let [h (schwarzschild-h [0.0 3.0 4.0 0.0] 0.1)]
+      (doseq [mu (range 4) nu (range 4)]
+        (is (close? (get-in (gtg/frame-adjoint (gtg/frame-adjoint h)) [mu nu])
+                    (get-in h [mu nu]))
+            (str "frame-adjoint(frame-adjoint(h))[" mu "][" nu "] = h[" mu "][" nu "]")))))
+  (testing "at position-gauge-identity, frame-adjoint is EXACTLY the identity again"
+    (is (= gtg/position-gauge-identity (gtg/frame-adjoint gtg/position-gauge-identity))))
+  (testing "concretely: frame-adjoint of the Schwarzschild hbar (eq 6.79) at
+            x=[0 3 4 0], M=0.1 (k=sqrt(2M/r)=0.2, unit radial n=(0.6,0.8,0))
+            reproduces h = [[1 0.12 0.16 0] [0 1 0 0] [0 0 1 0] [0 0 0 1]] --
+            independently confirmed against the standalone Python reference's
+            adjoint-relation derivation of h from hbar"
+    (let [x [0.0 3.0 4.0 0.0] M 0.1
+          h (gtg/frame-adjoint (schwarzschild-hbar x M))
+          expected [[1.0 0.12 0.16 0.0] [0.0 1.0 0.0 0.0] [0.0 0.0 1.0 0.0] [0.0 0.0 0.0 1.0]]]
+      (doseq [mu (range 4) nu (range 4)]
+        (is (close? (get-in h [mu nu]) (get-in expected [mu nu]))
+            (str "h[" mu "][" nu "]"))))))
+
+(deftest bivector-matrix-round-trip-and-wedge-vectors-antisymmetry
+  (testing "bivector->matrix / matrix->bivector round-trip for a concrete
+            6-component bivector"
+    (let [b [0.1 -0.2 0.3 0.4 -0.5 0.6]]
+      (is (= b (gtg/matrix->bivector (gtg/bivector->matrix b))))))
+  (testing "wedge-vectors is antisymmetric: u^v = -(v^u)"
+    (let [u [1.0 2.0 -1.0 0.5] v [0.3 -0.7 1.1 2.2]]
+      (is (= (gtg/wedge-vectors u v) (mapv - (gtg/wedge-vectors v u))))))
+  (testing "wedge-vectors of a vector with itself is exactly zero"
+    (let [u [1.0 2.0 -1.0 0.5]]
+      (is (every? #(= % 0.0) (gtg/wedge-vectors u u))))))
+
+(deftest vector-dot-bivector-matches-hand-computation
+  (testing "e_0 . (e_1^e_2) = (e_0.e_1)e_2 - (e_0.e_2)e_1 = 0 (e_0 is
+            Minkowski-orthogonal to both e_1 and e_2)"
+    (let [v [1.0 0.0 0.0 0.0]
+          B (gtg/wedge-vectors [0.0 1.0 0.0 0.0] [0.0 0.0 1.0 0.0])]
+      (is (every? #(= % 0.0) (gtg/vector-dot-bivector v B)))))
+  (testing "e_1 . (e_0^e_1) = (e_1.e_0)e_1 - (e_1.e_1)e_0 = 0 - (-1)e_0 = e_0
+            (e_1.e_0=0 Minkowski-orthogonal, e_1.e_1=-1 spacelike unit square)"
+    (let [v [0.0 1.0 0.0 0.0]
+          B (gtg/wedge-vectors [1.0 0.0 0.0 0.0] [0.0 1.0 0.0 0.0])]
+      (is (= [1.0 0.0 0.0 0.0] (gtg/vector-dot-bivector v B))))))
+
+(deftest bivector-commutator-is-antisymmetric
+  (testing "[B1,B2] = -[B2,B1] for two concrete, generic bivectors"
+    (let [f-abc (gtg/rotation-raw-structure-constants)
+          B1 [0.3 -0.2 0.1 0.5 -0.4 0.2]
+          B2 [0.1 0.6 -0.3 0.2 0.1 -0.5]
+          c12 (gtg/bivector-commutator f-abc B1 B2)
+          c21 (gtg/bivector-commutator f-abc B2 B1)]
+      (doseq [k (range 6)]
+        (is (close? (nth c12 k) (- (nth c21 k))) (str "[B1,B2][" k "] = -[B2,B1][" k "]"))))))
+
+;; ---------------------------------------------------------------------------
+;; omega-from-h (item 15) -- Schwarzschild-solution regression, two points.
+;; ---------------------------------------------------------------------------
+
+(deftest omega-from-h-matches-ldg-schwarzschild-closed-form-omega
+  (testing "point A: x=[0 3 4 0] (r=5), M=0.1"
+    (let [x [0.0 3.0 4.0 0.0]
+          h-field (schwarzschild-h-field 0.1)
+          Omega (gtg/omega-from-h h-field x)
+          expected [[0.0 0.0 0.0 0.0 0.0 0.0]
+                    [-0.0184 0.0288 0.0 0.0 0.0 0.0]
+                    [0.0288 -0.0016 0.0 0.0 0.0 0.0]
+                    [0.0 0.0 -0.04 0.0 0.0 0.0]]]
+      (doseq [mu (range 4) k (range 6)]
+        (is (close-fd? (get-in Omega [mu k]) (get-in expected [mu k]))
+            (str "Omega_" mu "^" k)))))
+  (testing "point B: x=[0 1 2 2] (r=3), M=0.05"
+    (let [x [0.0 1.0 2.0 2.0]
+          h-field (schwarzschild-h-field 0.05)
+          Omega (gtg/omega-from-h h-field x)
+          expected [[0.0 0.0 0.0 0.0 0.0 0.0]
+                    [-0.050715051621 0.020286020648 0.020286020648 0.0 0.0 0.0]
+                    [0.020286020648 -0.020286020648 0.040572041297 0.0 0.0 0.0]
+                    [0.020286020648 0.040572041297 -0.020286020648 0.0 0.0 0.0]]]
+      (doseq [mu (range 4) k (range 6)]
+        (is (close-fd? (get-in Omega [mu k]) (get-in expected [mu k]))
+            (str "Omega_" mu "^" k))))))
+
+;; ---------------------------------------------------------------------------
+;; riemann-map (item 16) -- LDG eq (6.73)'s closed-form curvature, two points
+;; x two independent bivector directions each.
+;; ---------------------------------------------------------------------------
+
+(deftest riemann-map-matches-ldg-673-closed-form-sigma-r
+  (testing "point A: R(sigma_r), sigma_r = e_r^e_t -- LDG eq (6.73)'s closed
+            form R(B) = -(M/2r^3)(B+3 sigma_r B sigma_r) evaluated at B=sigma_r
+            itself (an eigenvector case of the sandwich, independently
+            confirmed via the Python reference's full geometric-algebra
+            sandwich computation)"
+    (let [x [0.0 3.0 4.0 0.0]
+          h-field (schwarzschild-h-field 0.1)
+          [nx ny nz] (unit-radial x)
+          e-r [0.0 nx ny nz]
+          sigma-r (gtg/wedge-vectors e-r e-t)
+          R-map (gtg/riemann-map-matrix h-field x)
+          R-sigma-r (tensor/mat-vec R-map sigma-r)
+          expected [0.00096 0.00128 0.0 0.0 0.0 0.0]]
+      (doseq [k (range 6)]
+        (is (close-fd? (nth R-sigma-r k) (nth expected k)) (str "R(sigma_r)[" k "]")))))
+  (testing "point B: x=[0 1 2 2] (r=3), M=0.05"
+    (let [x [0.0 1.0 2.0 2.0]
+          h-field (schwarzschild-h-field 0.05)
+          [nx ny nz] (unit-radial x)
+          e-r [0.0 nx ny nz]
+          sigma-r (gtg/wedge-vectors e-r e-t)
+          R-map (gtg/riemann-map-matrix h-field x)
+          R-sigma-r (tensor/mat-vec R-map sigma-r)
+          expected [0.0012345679012 0.0024691358025 0.0024691358025 0.0 0.0 0.0]]
+      (doseq [k (range 6)]
+        (is (close-fd? (nth R-sigma-r k) (nth expected k)) (str "R(sigma_r)[" k "]"))))))
+
+(deftest riemann-map-matches-ldg-673-closed-form-perpendicular-bivector
+  (testing "point A: B = e_z^e_t -- e_z is perpendicular to e_r=(0.6,0.8,0)
+            here, exercising the OTHER eigenvalue of LDG eq (6.73)'s sandwich
+            (a genuinely different bivector direction than sigma_r)"
+    (let [x [0.0 3.0 4.0 0.0]
+          h-field (schwarzschild-h-field 0.1)
+          e-z [0.0 0.0 0.0 1.0]
+          B-perp (gtg/wedge-vectors e-z e-t)
+          R-map (gtg/riemann-map-matrix h-field x)
+          R-B (tensor/mat-vec R-map B-perp)
+          expected [0.0 0.0 -0.0008 0.0 0.0 0.0]]
+      (doseq [k (range 6)]
+        (is (close-fd? (nth R-B k) (nth expected k)) (str "R(B_perp)[" k "]")))))
+  (testing "point B: x=[0 1 2 2], M=0.05, e_perp=(0,1/sqrt2,-1/sqrt2)
+            (perpendicular to e_r=(1,2,2)/3 in the y-z plane)"
+    (let [x [0.0 1.0 2.0 2.0]
+          h-field (schwarzschild-h-field 0.05)
+          s (/ 1.0 (Math/sqrt 2.0))
+          e-perp [0.0 0.0 s (- s)]
+          B-perp (gtg/wedge-vectors e-perp e-t)
+          R-map (gtg/riemann-map-matrix h-field x)
+          R-B (tensor/mat-vec R-map B-perp)
+          expected [0.0 -0.0013094570021 0.0013094570021 0.0 0.0 0.0]]
+      (doseq [k (range 6)]
+        (is (close-fd? (nth R-B k) (nth expected k)) (str "R(B_perp)[" k "]"))))))
+
+(deftest riemann-basis-pair-antisymmetric-and-zero-on-diagonal
+  (testing "R(e_mu^e_mu) = 0 for every mu, an algebraic consequence of eq
+            (4.48)'s own antisymmetry in a,b (see riemann-basis-pair's
+            docstring derivation) -- checked numerically for the
+            Schwarzschild solution, not merely asserted"
+    (let [h-field (schwarzschild-h-field 0.1)
+          x [0.0 3.0 4.0 0.0]]
+      (doseq [mu (range 4)]
+        (let [R-mm (gtg/riemann-basis-pair h-field x mu mu)]
+          (doseq [k (range 6)]
+            (is (close-fd? (nth R-mm k) 0.0) (str "R(e_" mu "^e_" mu ")[" k "]")))))))
+  (testing "R(e_nu^e_mu) = -R(e_mu^e_nu) for every off-diagonal (mu,nu) pair"
+    (let [h-field (schwarzschild-h-field 0.1)
+          x [0.0 3.0 4.0 0.0]]
+      (doseq [mu (range 4) nu (range 4) :when (not= mu nu)]
+        (let [R-mn (gtg/riemann-basis-pair h-field x mu nu)
+              R-nm (gtg/riemann-basis-pair h-field x nu mu)]
+          (doseq [k (range 6)]
+            (is (close-fd? (nth R-mn k) (- (nth R-nm k)))
+                (str "R(e_" mu "^e_" nu ")[" k "] = -R(e_" nu "^e_" mu ")[" k "]"))))))))
+
+;; ---------------------------------------------------------------------------
+;; flat-limit -- Omega and R vanish identically (not merely numerically) for
+;; a constant h-field.
+;; ---------------------------------------------------------------------------
+
+(deftest omega-and-riemann-vanish-exactly-in-the-flat-limit
+  (testing "h = position-gauge-identity (a CONSTANT field): hbar = h = the
+            identity everywhere, so hbar^-1(a) is a CONSTANT vector field for
+            every fixed a -- every finite difference of a constant function
+            is the subtraction of two IDENTICAL floats, hence EXACTLY (not
+            merely close) 0.0, all the way through H(a), omega(a), and R(a^b)
+            -- matching this namespace's earlier flat-limit conventions
+            (Phase 0a's rotation-field-strength-vanishes-*, Phase 0c's
+            curvature-quadratic-invariant-vanishes-*)"
+    (let [h-field (constantly gtg/position-gauge-identity)
+          x [0.3 -0.7 1.2 0.4]
+          Omega (gtg/omega-from-h h-field x)]
+      (doseq [mu (range 4) k (range 6)]
+        (is (= 0.0 (get-in Omega [mu k])) (str "Omega_" mu "^" k " exactly 0.0")))
+      (let [R-map (gtg/riemann-map-matrix h-field x)]
+        (doseq [i (range 6) j (range 6)]
+          (is (= 0.0 (get-in R-map [i j])) (str "R-map[" i "][" j "] exactly 0.0")))))))
+
+;; ---------------------------------------------------------------------------
+;; curvature-scalar (item 17) -- the true LDG Ricci scalar, R=0 for the
+;; Schwarzschild VACUUM solution.
+;; ---------------------------------------------------------------------------
+
+(deftest curvature-scalar-vanishes-for-schwarzschild-vacuum-solution
+  (testing "point A and point B: LDG's Ricci scalar formula
+            R = sum_{a,b} gamma^a.(gamma^b.R(h_b^h_a)) evaluates to ~0.0
+            (within finite-difference tolerance) for LDG's own Schwarzschild
+            VACUUM solution -- the physically expected result, since a vacuum
+            solution of the field equation has zero Ricci TENSOR by
+            construction, and the Ricci SCALAR is a direct further
+            contraction of that tensor (R_ab=0 implies R=0 as a special
+            case, no additional vacuum-specific argument needed)"
+    (doseq [[x M] [[[0.0 3.0 4.0 0.0] 0.1] [[0.0 1.0 2.0 2.0] 0.05]]]
+      (let [h-field (schwarzschild-h-field M)
+            R (gtg/curvature-scalar h-field x)]
+        (is (close-fd? R 0.0) (str "curvature-scalar at x=" x " M=" M " => " R)))))
+  (testing "flat limit (h=position-gauge-identity): curvature-scalar is
+            EXACTLY 0.0, not merely close -- every derivative in the
+            pipeline vanishes identically for a constant field (same
+            reasoning as omega-and-riemann-vanish-exactly-in-the-flat-limit)"
+    (let [h-field (constantly gtg/position-gauge-identity)
+          x [0.2 0.5 -0.3 0.1]]
+      (is (= 0.0 (gtg/curvature-scalar h-field x))))))
