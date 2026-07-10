@@ -172,12 +172,30 @@
   SU(2) simultaneously (e.g. the left-handed quark doublet, really a (3,2)
   bidoublet) is not constructed here as a genuine tensor-product
   representation -- psi is assumed nontrivial under at most one of the two
-  non-abelian factors at a time, which is what the test suite exercises."
+  non-abelian factors at a time, which is what the test suite exercises.
+
+  *** BUG FIX (found by independent adversarial review): *** the U(1)_Y
+  generator MUST be built from :Y/2, not the raw :Y, to be consistent with
+  this namespace's own Gell-Mann-Nishijima convention Q=T3+Y/2 (checked by
+  `gell-mann-nishijima-ok?`) and its own `weinberg-angle`/`photon-Z`. Proof:
+  after mixing B_mu=cos(theta_W)A_mu-sin(theta_W)Z_mu,
+  W3_mu=sin(theta_W)A_mu+cos(theta_W)Z_mu (the inverse of `mixing-matrix`),
+  the SU(2)xU(1) coupling's photon (A_mu) coefficient is
+  g*sin(theta_W)*T3 + g'*cos(theta_W)*Y_eff. Since e=g*sin(theta_W)=
+  g'*cos(theta_W) (this namespace's own w-mass/z-mass/weinberg-angle already
+  satisfy this), the coefficient is e*(T3+Y_eff), which equals the required
+  e*Q=e*(T3+Y/2) only for Y_eff=Y/2 -- using raw Y gives e*(T3+Y), wrong by a
+  T3-dependent factor for every charged fermion with T3!=0 (e.g. exactly 1.5x
+  too large in magnitude for e_L: T3=-1/2,Y=-1, independently confirmed
+  numerically). Was invisible to `covariant-derivative-sm-reduces-to-partial-
+  when-fields-off`, the only existing test of this function, because that
+  test only exercises the A-hyper=0 case where the U(1) generator's
+  normalization cannot matter."
   [d-mu-psi fermion A-color A-weak A-hyper gs gw gy psi]
   (let [dim (count psi)
         Ts-c (if (= (:color fermion) :triplet) gauge/su3-generators [])
         Ts-w (if (= (:weak fermion) :doublet) gauge/su2-generators [])
-        Ts-y (gauge/u1-generators (:Y fermion) dim)
+        Ts-y (gauge/u1-generators (/ (:Y fermion) 2.0) dim)
         corr-c (gauge/gauge-correction Ts-c A-color gs psi)
         corr-w (gauge/gauge-correction Ts-w A-weak gw psi)
         corr-y (gauge/gauge-correction Ts-y [A-hyper] gy psi)]

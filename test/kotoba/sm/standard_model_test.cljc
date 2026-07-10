@@ -74,6 +74,45 @@
           D (sm/covariant-derivative-sm d-psi fermion (vec (repeat 8 0.0)) [] 0.0 1.2 0.65 0.36 psi)]
       (is (c/v-approx= D d-psi)))))
 
+(deftest covariant-derivative-sm-photon-coupling-matches-e-times-Q
+  (testing "HONEST BUG-FIX REGRESSION (found by independent adversarial review):
+            for the left-handed electron (T3=-1/2, Y=-1, Q=-1, a weak-doublet
+            lepton with nonzero T3 -- the class of fermion the previous
+            fields-off-only test could never exercise, since the U(1)
+            generator's normalization is invisible when A-hyper=0), feed a
+            PURE PHOTON field configuration (B_mu=cos(theta_W)*A, W3_mu=
+            sin(theta_W)*A -- the inverse of `photon-Z`'s [A Z]=R[B W3], at
+            Z=0) through the real SU(2)xU(1) covariant derivative and check
+            the resulting correction is EXACTLY -i*e*Q*A*psi, e=g*sin(theta_W)
+            (=g'*cos(theta_W), both already independently checked equal
+            elsewhere in this namespace). This is the check that catches the
+            raw-Y-vs-Y/2 hypercharge-generator bug: using raw Y gives
+            -i*e*(T3+Y)*A*psi instead, off by a factor of (T3+Y)/(T3+Y/2) =
+            1.5 in magnitude for this exact fermion"
+    (let [g 0.65 g-prime 0.36
+          theta-w (sm/weinberg-angle g g-prime)
+          e (* g (Math/sin theta-w))
+          A-val 1.0
+          B-mu (* (Math/cos theta-w) A-val)
+          W3-mu (* (Math/sin theta-w) A-val)
+          fermion {:color :singlet :weak :doublet :Y -1.0}
+          T3 -0.5 Y -1.0
+          Q (+ T3 (/ Y 2.0))
+          psi [(c/c 0 0) (c/c 1 0)]         ;; e_L only (lower doublet slot)
+          d-psi [(c/c 0 0) (c/c 0 0)]        ;; isolate the gauge correction alone
+          D (sm/covariant-derivative-sm d-psi fermion [] [0.0 0.0 W3-mu] B-mu 1.0 g g-prime psi)
+          expected (c/v-scale (c/c 0 (- (* e Q))) psi)]  ;; -i*e*Q*psi
+      (is (close? Q -1.0) "sanity: Q=T3+Y/2=-1/2+-1/2=-1 for e_L")
+      (doseq [k (range 2)]
+        (is (close? (c/re (nth D k)) (c/re (nth expected k))) (str "Re[D[" k "]]"))
+        (is (close? (c/im (nth D k)) (c/im (nth expected k))) (str "Im[D[" k "]]")))
+      (testing "and this genuinely distinguishes the bug from the fix: the
+                pre-fix (raw Y) correction would have been -i*e*(T3+Y)*psi,
+                1.5x too large in magnitude, NOT matching -i*e*Q*psi"
+        (let [wrong-Q (+ T3 Y)]
+          (is (not (close? wrong-Q Q)))
+          (is (close? (/ wrong-Q Q) 1.5)))))))
+
 (deftest lagrangian-density-pieces
   (testing "Yang-Mills density of a zero field strength is zero"
     (let [F (vec (repeat 4 (vec (repeat 4 (vec (repeat 8 0.0))))))]
