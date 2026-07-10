@@ -37,7 +37,17 @@ out of scope here.
   breaking (Weinberg angle, photon/Z/W±, `M_W = M_Z cos(theta_W)`), the Higgs
   potential/vev/Yukawa mass generation, the CKM quark-mixing matrix, the full
   `SU(3)_c x SU(2)_L x U(1)_Y` covariant derivative, and Lagrangian-density
-  term assembly (Yang-Mills + Dirac + Higgs + Yukawa).
+  term assembly (Yang-Mills + Dirac + Higgs + Yukawa). An independent
+  adversarial review of this namespace (applying the same discipline that
+  found real bugs in `kotoba.sm.gtg`) found and fixed a real bug in
+  `covariant-derivative-sm`: the U(1)_Y generator used raw `:Y` instead of
+  `:Y/2`, giving a photon coupling wrong by a `T3`-dependent factor for every
+  charged fermion with `T3 != 0` (50% too large in magnitude for `e_L`) --
+  see
+  [`90-docs/adr/2607105000-*`](../../../90-docs/adr/2607105000-kotoba-lang-standard-model-hypercharge-generator-bug-fix.md)
+  in the superproject. Everything else in this namespace and in `complex`/
+  `tensor`/`vector-field`/`spinor`/`gauge`'s original `SU(2)`/`SU(3)` core
+  was independently re-derived from standard QFT/PDG references and matched.
 - **`kotoba.sm.gtg`** -- Gauge Theory Gravity (Lasenby-Doran-Gull 1998)
   **rotation-gauge sector (Phase 0a), position-gauge sector (Phase 0b), a
   narrowly-scoped curvature quadratic invariant (Phase 0c), a general-h
@@ -468,6 +478,22 @@ Riemann map, and the true LDG Ricci scalar -- ADR-2607102300) adds:**
     ambiguity in eq (6.169)'s `(rho+p)` term (identically zero, and
     therefore moot, for the pure-de-Sitter case landed here) -- reported
     honestly as a follow-up rather than risked as a silently-wrong test.
+
+**⚠ CONFIRMED, UNRESOLVED BUG for any `h`-field with a genuinely
+TIME-VARYING rate (`Hdot != 0`)**: `omega-from-h`/`riemann-map`/
+`riemann-basis-pair`/`curvature-scalar` return **exactly 7x the correct
+value** for a matter-dominated FRW dust solution (`H(t)=2/(3t)`), confirmed
+independently by two people and cross-checked against an ordinary
+Christoffel-symbol GR computation outside the GTG formalism entirely. Five
+independent investigations (see
+[`90-docs/adr/2607103600-*`](../../../90-docs/adr/2607103600-kotoba-lang-standard-model-time-derivative-sign-bug-unresolved.md)
+in the superproject) have cleared every individual pipeline function against
+its own defining LDG equation and against independent from-scratch
+reimplementations, without finding a coding-level bug -- the root cause is
+currently unknown and may be a genuine derivation-level subtlety, not a
+translation error. **Schwarzschild (static) and de Sitter (`Hdot=0`) remain
+verified and safe.** Do not trust this pipeline for any `h`-field where the
+expansion/Hubble-like rate itself changes with time until this is resolved.
 
 **Explicitly out of scope, not implemented here** (deliberately, deferred to
 a later phase if ever pursued): the Einstein tensor/multivector `G(a)`, the
