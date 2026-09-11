@@ -524,5 +524,5 @@ gravity engine.
 ## Develop
 
 ```sh
-clojure -M:test
+kbb -M:test
 ```
