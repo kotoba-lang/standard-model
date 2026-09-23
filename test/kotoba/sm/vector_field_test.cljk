@@ -1,5 +1,5 @@
 (ns kotoba.sm.vector-field-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.sm.tensor :as tensor]
             [kotoba.sm.vector-field :as vf]))
 

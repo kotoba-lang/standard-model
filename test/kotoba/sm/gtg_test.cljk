@@ -23,7 +23,7 @@
   position gauge field h_mu and its derived metric g_mu-nu -- see
   kotoba.sm.gtg's Phase-0b SCOPE note (items 7-9) for the exact claims being
   checked."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.sm.complex :as c]
             [kotoba.sm.spinor :as spinor]
             [kotoba.sm.tensor :as tensor]
