@@ -1,5 +1,5 @@
 (ns kotoba.sm.complex-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.sm.complex :as c]))
 
 (defn- abs-num [x] (if (neg? x) (- x) x))

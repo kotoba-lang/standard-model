@@ -1,5 +1,5 @@
 (ns kotoba.sm.standard-model-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.sm.complex :as c]
             [kotoba.sm.tensor :as tensor]
             [kotoba.sm.gauge :as gauge]

@@ -1,5 +1,5 @@
 (ns kotoba.sm.gauge-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.sm.complex :as c]
             [kotoba.sm.spinor :as spinor]
             [kotoba.sm.gauge :as g]))
